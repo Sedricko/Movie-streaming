@@ -51,4 +51,6 @@ e `./gradlew test` passarem**, corrigindo versões/imports. Depois siga `docs/04
 ./gradlew test                   # testes unitários (RangeParserTest)
 ./gradlew installDebug           # instalar no aparelho
 ```
-(O wrapper `gradlew` não está no repositório: gere com `gradle wrapper` ou abra no Android Studio.)
+Antes do primeiro build local: `scripts/build-tdlib.sh <commit>` (mesmo commit do `TD_REF` no workflow) gera `tdlib/`.
+O CI (GitHub Actions) faz tudo sozinho e publica o APK como artifact `lumicast-debug-apk`;
+as chaves vêm dos Secrets `TELEGRAM_API_ID`/`TELEGRAM_API_HASH` (sem elas o APK abre no modo demonstração).
