@@ -14,7 +14,13 @@ git -C "$WORK/td" checkout "$TD_REF"
 echo "TDLib commit: $(git -C "$WORK/td" rev-parse HEAD)"
 
 cd "$WORK/td/example/android"
-./build.sh
+ls
+# Passos do README oficial (td/example/android), com os valores padrão de SDK/NDK/OpenSSL.
+./check-environment.sh
+./fetch-sdk.sh
+./build-openssl.sh
+./build-tdlib.sh
+find tdlib -maxdepth 3
 
 rm -rf "$ROOT/tdlib" && mkdir -p "$ROOT/tdlib"
 cp -r tdlib/java "$ROOT/tdlib/java"

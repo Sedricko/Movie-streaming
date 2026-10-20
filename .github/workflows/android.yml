@@ -7,7 +7,7 @@ on:
 
 env:
   # Commit do TDLib usado no app. Mudar aqui força recompilar o TDLib (o resultado fica em cache).
-  TD_REF: master
+  TD_REF: 0e88653dcbf4e44c73cb655a05b58cd749a91169
 
 jobs:
   tdlib:
