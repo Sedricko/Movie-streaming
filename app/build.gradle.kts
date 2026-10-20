@@ -42,6 +42,11 @@ android {
         compose = true
         buildConfig = true
     }
+    sourceSets["main"].apply {
+        // TDLib compilado por scripts/build-tdlib.sh (o CI faz isso e guarda em cache).
+        java.srcDir(rootProject.file("tdlib/java"))
+        jniLibs.srcDir(rootProject.file("tdlib/libs"))
+    }
     packaging {
         resources.excludes += setOf("/META-INF/{AL2.0,LGPL2.1}", "META-INF/INDEX.LIST", "META-INF/io.netty.versions.properties")
     }

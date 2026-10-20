@@ -32,10 +32,13 @@ jobs:
         with: { name: tdlib, path: tdlib, retention-days: 7 }
 
   app:
+    needs: tdlib
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: tdlib, path: tdlib }
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 17 }
       - uses: gradle/actions/setup-gradle@v4
