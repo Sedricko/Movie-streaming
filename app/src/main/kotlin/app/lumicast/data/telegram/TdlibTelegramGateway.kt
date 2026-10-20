@@ -130,7 +130,7 @@ class TdlibTelegramGateway(context: Context) : TelegramGateway {
         runCatching { send(TdApi.LoadChats(TdApi.ChatListMain(), CHAT_LIMIT)) }
         val ids = (send(TdApi.GetChats(TdApi.ChatListMain(), CHAT_LIMIT)) as TdApi.Chats).chatIds
         val meId = runCatching { (send(TdApi.GetMe()) as TdApi.User).id }.getOrDefault(0L)
-        return ids.mapNotNull { id ->
+        return ids.toList().mapNotNull { id ->
             val chat = runCatching { send(TdApi.GetChat(id)) as TdApi.Chat }.getOrNull() ?: return@mapNotNull null
             // Conteúdo protegido ("proibir salvar") não é transmitido. Veja docs/05-riscos-e-conformidade.md.
             if (chat.hasProtectedContent) return@mapNotNull null
