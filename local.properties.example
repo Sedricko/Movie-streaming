@@ -1,0 +1,4 @@
+# Copie para local.properties e preencha (https://my.telegram.org → API development tools)
+sdk.dir=/caminho/do/Android/Sdk
+TELEGRAM_API_ID=0
+TELEGRAM_API_HASH=
