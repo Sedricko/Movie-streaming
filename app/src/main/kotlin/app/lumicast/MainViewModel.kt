@@ -5,12 +5,18 @@ import android.content.Intent
 import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import app.lumicast.data.library.saveToDownloads
 import app.lumicast.data.stream.RangeStreamServer
 import app.lumicast.data.stream.findLanIPv4
 import app.lumicast.domain.CastDevice
 import app.lumicast.domain.PlayStatus
 import app.lumicast.domain.TgChat
 import app.lumicast.domain.TgVideo
+import app.lumicast.domain.VideoFolder
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.util.UUID
 import app.lumicast.domain.StreamSource
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -83,6 +89,72 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    val folders: StateFlow<List<VideoFolder>> = container.folders.folders
+    private val _openFolderId = MutableStateFlow<String?>(null)
+    val openFolder: StateFlow<VideoFolder?> = combine(folders, _openFolderId) { fs, id -> fs.firstOrNull { it.id == id } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /** Texto do download de pasta em andamento ("Baixando 2 de 5…"), ou null. */
+    private val _downloadStatus = MutableStateFlow<String?>(null)
+    val downloadStatus: StateFlow<String?> = _downloadStatus.asStateFlow()
+
+    fun showFolder(folder: VideoFolder) {
+        _openChat.value = null
+        _openFolderId.value = folder.id
+    }
+
+    private fun editFolder(id: String, change: (VideoFolder) -> VideoFolder?) =
+        container.folders.update { fs -> fs.mapNotNull { if (it.id == id) change(it) else it } }
+
+    /** Cria a pasta (e já põe [video] nela, se veio de um vídeo). */
+    fun createFolder(name: String, video: TgVideo?) =
+        container.folders.update { it + VideoFolder(UUID.randomUUID().toString(), name.trim(), listOfNotNull(video)) }
+
+    fun addToFolder(folderId: String, video: TgVideo) {
+        editFolder(folderId) { f -> if (f.videos.any { it.fileId == video.fileId }) f else f.copy(videos = f.videos + video) }
+        Toast.makeText(getApplication(), "Adicionado à pasta.", Toast.LENGTH_SHORT).show()
+    }
+
+    fun renameFolder(folderId: String, name: String) = editFolder(folderId) { it.copy(name = name.trim()) }
+
+    fun deleteFolder(folderId: String) {
+        editFolder(folderId) { null }
+        if (_openFolderId.value == folderId) _openFolderId.value = null
+    }
+
+    fun renameVideo(folderId: String, video: TgVideo, title: String) =
+        editFolder(folderId) { f -> f.copy(videos = f.videos.map { if (it.fileId == video.fileId) it.copy(title = title.trim()) else it }) }
+
+    fun removeFromFolder(folderId: String, video: TgVideo) =
+        editFolder(folderId) { f -> f.copy(videos = f.videos.filterNot { it.fileId == video.fileId }) }
+
+    fun moveVideo(fromId: String, video: TgVideo, toId: String) {
+        if (fromId == toId) return
+        removeFromFolder(fromId, video)
+        addToFolder(toId, video)
+    }
+
+    /** Baixa todos os vídeos da pasta para Downloads/Lumicast/<pasta>. */
+    fun downloadFolder(folderId: String) = viewModelScope.launch {
+        val folder = folders.value.firstOrNull { it.id == folderId } ?: return@launch
+        if (!container.realMode || _downloadStatus.value != null) return@launch
+        // shortcut: o download vive no ViewModel; se o Android matar o app no meio, refaça (WorkManager resolveria).
+        var done = 0
+        folder.videos.forEachIndexed { i, video ->
+            _downloadStatus.value = "Baixando ${i + 1} de ${folder.videos.size}: ${video.title}"
+            runCatching {
+                val path = telegram.download(video)
+                withContext(Dispatchers.IO) { saveToDownloads(getApplication(), File(path), folder.name, video.title, video.mimeType) }
+                if (streaming?.first?.fileId != video.fileId && previewing?.first?.fileId != video.fileId) telegram.releaseLocal(video)
+                done++
+            }.onFailure { Diag.log("download", "falhou ${video.fileId}: ${it.message}") }
+        }
+        _downloadStatus.value = null
+        val msg = if (done == folder.videos.size) "Pasta salva em Downloads/Lumicast/${folder.name}."
+        else "Baixados $done de ${folder.videos.size}. Confira a internet e o espaço livre e tente de novo."
+        Toast.makeText(getApplication(), msg, Toast.LENGTH_LONG).show()
+    }
+
     fun enqueue(video: TgVideo) {
         _queue.value += video
         Toast.makeText(getApplication(), "Adicionado à fila (${_queue.value.size}).", Toast.LENGTH_SHORT).show()
@@ -139,6 +211,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun open(chat: TgChat) = viewModelScope.launch {
+        _openFolderId.value = null
         _openChat.value = chat
         _loading.value = true
         _videos.value = telegram.videos(chat.id)
@@ -146,6 +219,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun closeChat() {
+        _openFolderId.value = null
         _openChat.value = null
         _videos.value = emptyList()
     }

@@ -183,6 +183,16 @@ class TdlibTelegramGateway(context: Context) : TelegramGateway {
         return TdlibStreamSource(video.fileId, video.sizeBytes, video.mimeType)
     }
 
+    override suspend fun download(video: TgVideo): String {
+        val file = send(TdApi.DownloadFile(video.fileId, 1, 0, 0, true)) as TdApi.File
+        check(file.local.isDownloadingCompleted) { "O download de “${video.title}” não terminou. Tente de novo." }
+        return file.local.path
+    }
+
+    override suspend fun releaseLocal(video: TgVideo) {
+        runCatching { send(TdApi.DeleteFile(video.fileId)) }
+    }
+
     override suspend fun thumbnail(video: TgVideo): String? {
         val id = video.thumbnailFileId ?: return null
         val file = runCatching { send(TdApi.DownloadFile(id, 1, 0, 0, true)) as TdApi.File }.getOrNull()

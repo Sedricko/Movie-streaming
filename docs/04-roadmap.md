@@ -38,6 +38,8 @@ Marque `[x]` ao concluir. Sempre: build verde + testes + atualizar este arquivo.
 ## M5 — Qualidade de uso
 - [x] Fila (ordenar, tirar, próximo automático ao terminar ou a cada N min, horário de início), miniaturas,
       prévia no celular (Media3), chats fixados, diagnóstico interno (TVs → Enviar diagnóstico), número do chip no login.
+- [x] Pastas do Lumicast (criar, renomear, apagar; adicionar, mover, renomear e tirar vídeos) e baixar a pasta
+      para Downloads/Lumicast/<pasta> (galeria). Pastas ficam só no aparelho, não mexem no Telegram.
 - [ ] Fila, retomar de onde parou (posição por `chatId+messageId`), legendas (arquivo no chat/`.srt`), velocidade.
 - [ ] Aviso de formato incompatível; mensagens de erro do design system; acessibilidade (TalkBack).
 - [ ] Segurança: chave do banco TDLib no Keystore, token por stream, bind apenas no IP do Wi-Fi.

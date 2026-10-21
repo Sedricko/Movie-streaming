@@ -11,7 +11,18 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Logout
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.style.TextOverflow
+import app.lumicast.domain.VideoFolder
+import app.lumicast.ui.components.FolderActions
+import app.lumicast.ui.components.FolderPickerDialog
+import app.lumicast.ui.components.FolderRow
+import app.lumicast.ui.components.NameDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -44,6 +55,10 @@ fun LibraryScreen(
     chats: List<TgChat>,
     openChat: TgChat?,
     videos: List<TgVideo>,
+    folders: List<VideoFolder>,
+    openFolder: VideoFolder?,
+    downloadStatus: String?,
+    folderActions: FolderActions,
     devices: List<CastDevice>,
     pinned: Set<Long>,
     onTogglePin: (TgChat) -> Unit,
@@ -61,6 +76,14 @@ fun LibraryScreen(
 ) {
     var query by remember { mutableStateOf("") }
     var pending by remember { mutableStateOf<TgVideo?>(null) }
+    // Diálogos de pasta: o vídeo em questão (ou null quando é a pasta aberta / pasta nova vazia).
+    var newFolderFor by remember { mutableStateOf<TgVideo?>(null) }
+    var askNewFolder by remember { mutableStateOf(false) }
+    var addingToFolder by remember { mutableStateOf<TgVideo?>(null) }
+    var moving by remember { mutableStateOf<TgVideo?>(null) }
+    var renamingVideo by remember { mutableStateOf<TgVideo?>(null) }
+    var renamingFolder by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
 
     Column(modifier.fillMaxSize()) {
         Row(
@@ -68,7 +91,19 @@ fun LibraryScreen(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            if (openChat != null) {
+            if (openFolder != null) {
+                Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Voltar para a lista de chats")
+                    }
+                    Text(openFolder.name, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                IconButton(onClick = { renamingFolder = true }) { Icon(Icons.Rounded.Edit, "Renomear pasta") }
+                IconButton(onClick = { folderActions.download(openFolder.id) }, enabled = downloadStatus == null && openFolder.videos.isNotEmpty()) {
+                    Icon(Icons.Rounded.Download, "Baixar a pasta para o celular")
+                }
+                IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Rounded.Delete, "Apagar pasta") }
+            } else if (openChat != null) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Voltar para a lista de chats")
@@ -94,24 +129,46 @@ fun LibraryScreen(
             value = query,
             onValueChange = { query = it },
             leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
-            placeholder = { Text(if (openChat == null) "Buscar chat" else "Buscar vídeo") },
+            placeholder = { Text(if (openChat == null && openFolder == null) "Buscar chat ou pasta" else "Buscar vídeo") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
         )
 
-        if (openChat == null) {
+        downloadStatus?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 20.dp))
+        }
+
+        if (openChat == null && openFolder == null) {
+            val shownFolders = folders.filter { it.name.contains(query, ignoreCase = true) }
             val shown = chats.filter { it.title.contains(query, ignoreCase = true) }.sortedBy { it.id !in pinned }
-            if (shown.isEmpty()) {
-                EmptyState("Nenhum chat encontrado", "Tente outro nome ou limpe a busca.")
-            } else {
-                LazyColumn { items(shown, key = { it.id }) { ChatRow(it, pinned = it.id in pinned, onClick = { onOpenChat(it) }, onTogglePin = { onTogglePin(it) }) } }
+            LazyColumn {
+                item {
+                    Row(
+                        Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("Minhas pastas", style = MaterialTheme.typography.titleMedium)
+                        TextButton(onClick = { newFolderFor = null; askNewFolder = true }) { Text("Nova pasta") }
+                    }
+                }
+                items(shownFolders, key = { "f" + it.id }) { FolderRow(it, onClick = { folderActions.open(it) }) }
+                item { Text("Chats", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 20.dp, top = 12.dp)) }
+                if (shown.isEmpty()) item {
+                    Text(
+                        "Nenhum chat encontrado. Tente outro nome ou limpe a busca.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(20.dp),
+                    )
+                }
+                items(shown, key = { it.id }) { ChatRow(it, pinned = it.id in pinned, onClick = { onOpenChat(it) }, onTogglePin = { onTogglePin(it) }) }
             }
         } else {
-            val shown = videos.filter { it.title.contains(query, ignoreCase = true) }
+            val shown = (openFolder?.videos ?: videos).filter { it.title.contains(query, ignoreCase = true) }
             if (shown.isEmpty()) {
                 EmptyState(
-                    "Nenhum vídeo neste chat",
-                    "Envie um vídeo pelo Telegram e ele aparece aqui.",
+                    if (openFolder != null) "Pasta vazia" else "Nenhum vídeo neste chat",
+                    if (openFolder != null) "Toque num vídeo de um chat e escolha “Adicionar à pasta”." else "Envie um vídeo pelo Telegram e ele aparece aqui.",
                 )
             } else {
                 LazyColumn { items(shown, key = { it.fileId }) { VideoRow(it, loadThumbnail, onClick = { pending = it }) } }
@@ -129,6 +186,19 @@ fun LibraryScreen(
                     }
                     OutlinedButton(onClick = { onEnqueue(video); pending = null }, modifier = Modifier.weight(1f)) {
                         Text("Adicionar à fila")
+                    }
+                }
+                if (openFolder == null) {
+                    OutlinedButton(onClick = { addingToFolder = video; pending = null }, modifier = Modifier.fillMaxWidth()) {
+                        Text("Adicionar à pasta")
+                    }
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = { renamingVideo = video; pending = null }, modifier = Modifier.weight(1f)) { Text("Renomear") }
+                        OutlinedButton(onClick = { moving = video; pending = null }, modifier = Modifier.weight(1f)) { Text("Mover") }
+                        OutlinedButton(onClick = { folderActions.removeVideo(openFolder.id, video); pending = null }, modifier = Modifier.weight(1f)) {
+                            Text("Tirar")
+                        }
                     }
                 }
                 if (devices.isEmpty()) {
@@ -151,6 +221,47 @@ fun LibraryScreen(
                     )
                 }
             }
+        }
+    }
+
+    addingToFolder?.let { video ->
+        FolderPickerDialog(
+            title = "Adicionar à pasta",
+            folders = folders,
+            excludeId = null,
+            onPick = { folderActions.addTo(it.id, video) },
+            onNew = { newFolderFor = video; askNewFolder = true; addingToFolder = null },
+            onDismiss = { addingToFolder = null },
+        )
+    }
+    if (openFolder != null) moving?.let { video ->
+        FolderPickerDialog(
+            title = "Mover para",
+            folders = folders,
+            excludeId = openFolder.id,
+            onPick = { folderActions.moveVideo(openFolder.id, video, it.id) },
+            onNew = { newFolderFor = video; askNewFolder = true; folderActions.removeVideo(openFolder.id, video); moving = null },
+            onDismiss = { moving = null },
+        )
+    }
+    if (askNewFolder) {
+        NameDialog("Nova pasta", "", "Criar", onConfirm = { folderActions.create(it, newFolderFor) }, onDismiss = { askNewFolder = false })
+    }
+    if (openFolder != null) {
+        renamingVideo?.let { video ->
+            NameDialog("Renomear vídeo", video.title, "Salvar", onConfirm = { folderActions.renameVideo(openFolder.id, video, it) }, onDismiss = { renamingVideo = null })
+        }
+        if (renamingFolder) {
+            NameDialog("Renomear pasta", openFolder.name, "Salvar", onConfirm = { folderActions.rename(openFolder.id, it) }, onDismiss = { renamingFolder = false })
+        }
+        if (confirmDelete) {
+            AlertDialog(
+                onDismissRequest = { confirmDelete = false },
+                title = { Text("Apagar “${openFolder.name}”?") },
+                text = { Text("Os vídeos continuam no Telegram e no que você já baixou. Só a pasta some do Lumicast.") },
+                confirmButton = { TextButton(onClick = { folderActions.delete(openFolder.id); confirmDelete = false }) { Text("Apagar") } },
+                dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancelar") } },
+            )
         }
     }
 }

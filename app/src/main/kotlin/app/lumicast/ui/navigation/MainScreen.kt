@@ -17,6 +17,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -27,6 +28,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import app.lumicast.MainViewModel
 import app.lumicast.domain.AuthState
+import app.lumicast.ui.components.FolderActions
 import app.lumicast.ui.components.MiniPlayer
 import app.lumicast.ui.components.PreviewPlayer
 import app.lumicast.ui.screens.DevicesScreen
@@ -71,6 +73,16 @@ fun MainScreen(vm: MainViewModel) {
     val pinned by vm.pinned.collectAsStateWithLifecycle()
     val previewUrl by vm.previewUrl.collectAsStateWithLifecycle()
     val queue by vm.queue.collectAsStateWithLifecycle()
+    val folders by vm.folders.collectAsStateWithLifecycle()
+    val openFolder by vm.openFolder.collectAsStateWithLifecycle()
+    val downloadStatus by vm.downloadStatus.collectAsStateWithLifecycle()
+    val folderActions = remember(vm) {
+        FolderActions(
+            open = vm::showFolder, create = vm::createFolder, addTo = vm::addToFolder, rename = vm::renameFolder,
+            delete = vm::deleteFolder, download = { vm.downloadFolder(it) }, renameVideo = vm::renameVideo,
+            moveVideo = vm::moveVideo, removeVideo = vm::removeFromFolder,
+        )
+    }
     val scheduledAt by vm.scheduledAt.collectAsStateWithLifecycle()
     val switchEveryMin by vm.switchEveryMin.collectAsStateWithLifecycle()
 
@@ -113,6 +125,10 @@ fun MainScreen(vm: MainViewModel) {
                     chats = chats,
                     openChat = openChat,
                     videos = videos,
+                    folders = folders,
+                    openFolder = openFolder,
+                    downloadStatus = downloadStatus,
+                    folderActions = folderActions,
                     devices = devices,
                     pinned = pinned,
                     onTogglePin = vm::togglePin,

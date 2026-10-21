@@ -78,5 +78,6 @@ dependencies {
     debugImplementation(libs.compose.ui.tooling)
 
     testImplementation(libs.junit)
+    testImplementation(libs.org.json) // org.json real nos testes (o do android.jar é só stub)
     testImplementation(libs.kotlinx.coroutines.test)
 }
