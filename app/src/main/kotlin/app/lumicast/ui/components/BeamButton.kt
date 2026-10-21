@@ -6,7 +6,9 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -28,12 +30,14 @@ import androidx.compose.ui.unit.dp
 
 /**
  * O Feixe — assinatura do app. Círculo âmbar de 56 dp.
- * Em repouso: sólido. Transmitindo ([active]): anel que pulsa devagar (2,4 s), a menos que o sistema reduza animações.
+ * Em repouso: sólido. Conectando ([connecting]): ícone piscando. Conectado ([active]): selo fixo no canto
+ * (aparece mesmo com animações reduzidas) + anel que pulsa devagar (2,4 s).
  */
 @Composable
 fun BeamButton(
     active: Boolean,
     onClick: () -> Unit,
+    connecting: Boolean = false,
     description: String,
     modifier: Modifier = Modifier,
 ) {
@@ -53,10 +57,28 @@ fun BeamButton(
                 Icon(
                     imageVector = if (active) Icons.Rounded.CastConnected else Icons.Rounded.Cast,
                     contentDescription = null,
+                    modifier = if (connecting && !reduceMotion) Modifier.alpha(blink()) else Modifier,
                 )
             }
         }
+        if (active && !connecting) {
+            Box(
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .size(16.dp)
+                    .border(2.dp, MaterialTheme.colorScheme.background, CircleShape)
+                    .padding(2.dp)
+                    .background(MaterialTheme.colorScheme.tertiary, CircleShape),
+            )
+        }
     }
+}
+
+@Composable
+private fun blink(): Float {
+    val t = rememberInfiniteTransition(label = "conectando")
+    val a by t.animateFloat(0.25f, 1f, infiniteRepeatable(tween(600), RepeatMode.Reverse), label = "pisca")
+    return a
 }
 
 @Composable
