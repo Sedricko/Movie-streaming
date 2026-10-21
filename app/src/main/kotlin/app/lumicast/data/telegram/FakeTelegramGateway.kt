@@ -80,6 +80,8 @@ class FakeTelegramGateway : TelegramGateway {
 
     override fun downloadedFraction(video: TgVideo): Float = 0f
 
+    override suspend fun subtitleText(video: TgVideo): String? = null
+
     override suspend fun cacheBytes(): Long = 0
 
     override suspend fun trimCache(keepBytes: Long) = Unit
