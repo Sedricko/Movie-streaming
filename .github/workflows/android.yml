@@ -4,6 +4,8 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+  schedule:
+    - cron: "17 9 * * 1" # semanal: mantém vivo o cache da chave de assinatura (o GitHub apaga cache sem uso há 7 dias)
 
 env:
   # Commit do TDLib usado no app. Mudar aqui força recompilar o TDLib (o resultado fica em cache).
@@ -42,6 +44,14 @@ jobs:
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 17 }
       - uses: gradle/actions/setup-gradle@v4
+      # Mesma chave de assinatura em todo build: sem isso cada APK sai com chave nova e o Android
+      # recusa instalar por cima ("conflito com pacote existente"). A chave fica no cache privado do
+      # Actions, nunca no repositório (público). Só o main grava; os outros branches leem a do main.
+      - name: Chave de assinatura fixa
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: android-debug-keystore-v1
       - name: Versões estáveis mais recentes (referência)
         continue-on-error: true
         run: |
@@ -57,5 +67,12 @@ jobs:
           echo "TELEGRAM_API_ID=${{ secrets.TELEGRAM_API_ID || '0' }}" >> local.properties
           echo "TELEGRAM_API_HASH=${{ secrets.TELEGRAM_API_HASH }}" >> local.properties
       - run: ./gradlew --no-daemon assembleDebug testDebugUnitTest
+      - name: Guardar a chave de assinatura (primeira vez, só no main)
+        if: github.ref == 'refs/heads/main'
+        continue-on-error: true # já guardada → o GitHub recusa regravar a mesma chave de cache, e tudo bem
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: android-debug-keystore-v1
       - uses: actions/upload-artifact@v4
         with: { name: lumicast-debug-apk, path: app/build/outputs/apk/debug/*.apk }

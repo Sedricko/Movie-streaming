@@ -15,3 +15,12 @@ fun formatSize(bytes: Long): String {
     return if (mib >= 1024) String.format(Locale("pt", "BR"), "%.1f GB", mib / 1024.0)
     else String.format(Locale("pt", "BR"), "%.0f MB", mib)
 }
+
+/** "1:30" → 90, "14:50" → 890, "1:02:03" → 3723, "90" → 90; vazio ou inválido → null. */
+fun parseClock(text: String): Int? {
+    val parts = text.trim().split(':')
+    if (parts.isEmpty() || parts.size > 3 || parts.any { it.isBlank() }) return null
+    val nums = parts.map { it.trim().toIntOrNull()?.takeIf { n -> n >= 0 } ?: return null }
+    if (nums.size > 1 && nums.drop(1).any { it >= 60 }) return null
+    return nums.fold(0) { acc, n -> acc * 60 + n }
+}

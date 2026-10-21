@@ -114,6 +114,9 @@ class GoogleCastGateway(context: Context) : CastGateway {
         _playback.value = PlaybackState(video, device, PlayStatus.Connecting, start.toInt())
         val session = connect(device)
         val client = session.remoteMediaClient ?: error("A TV não aceitou a conexão.")
+        // a sessão é reaproveitada entre vídeos da fila: tirar antes de pôr, senão cada evento chega N vezes
+        client.unregisterCallback(mediaCallback)
+        client.removeProgressListener(progress)
         client.registerCallback(mediaCallback)
         client.addProgressListener(progress, 1_000)
         val info = MediaInfo.Builder(streamUrl)
