@@ -45,6 +45,11 @@ fun SettingsSheet(settings: AppSettings, onChange: (AppSettings) -> Unit, onDism
                 "Com o app aberto e transmitindo, as teclas de volume do celular mudam o volume da TV.",
                 settings.volumeKeys,
             ) { onChange(settings.copy(volumeKeys = it)) }
+            SettingSwitch(
+                "Converter formato automaticamente",
+                "Se a TV recusar o vídeo (ex.: MKV ou HEVC), o celular converte para MP4 e transmite. Leva alguns minutos; o convertido fica guardado.",
+                settings.autoConvert,
+            ) { onChange(settings.copy(autoConvert = it)) }
         }
     }
 }

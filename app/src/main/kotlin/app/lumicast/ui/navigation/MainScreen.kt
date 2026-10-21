@@ -89,6 +89,7 @@ fun MainScreen(vm: MainViewModel) {
     val trimEnd by vm.trimEnd.collectAsStateWithLifecycle()
     val selectedTv by vm.selectedTv.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
+    val conversion by vm.conversion.collectAsStateWithLifecycle()
     var showSettings by remember { mutableStateOf(false) }
     if (showSettings) SettingsSheet(settings, onChange = vm::updateSettings, onDismiss = { showSettings = false })
 
@@ -180,6 +181,8 @@ fun MainScreen(vm: MainViewModel) {
                     onNext = vm::next,
                     canSkipNext = queue.isNotEmpty() || settings.autoNext,
                     onVolume = vm::setVolume,
+                    conversion = conversion,
+                    onCancelConversion = vm::cancelConversion,
                     onSpeed = vm::setSpeed,
                     queue = queue,
                     scheduledAt = scheduledAt,

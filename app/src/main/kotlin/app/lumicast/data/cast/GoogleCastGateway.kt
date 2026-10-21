@@ -33,6 +33,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -77,6 +79,9 @@ class GoogleCastGateway(context: Context) : CastGateway {
     private val _devices = MutableStateFlow<List<CastDevice>>(emptyList())
     override val devices: StateFlow<List<CastDevice>> = _devices.asStateFlow()
 
+    private val _formatErrors = MutableSharedFlow<TgVideo>(extraBufferCapacity = 4)
+    override val formatErrors: Flow<TgVideo> = _formatErrors
+
     private val _playback = MutableStateFlow(PlaybackState())
     override val playback: StateFlow<PlaybackState> = _playback.asStateFlow()
 
@@ -106,8 +111,8 @@ class GoogleCastGateway(context: Context) : CastGateway {
                     reconnect("a TV parou com erro") // ex.: Wi-Fi oscilou e a TV perdeu o stream
                     return
                 }
+                casting?.second?.let { _formatErrors.tryEmit(it) } // o ViewModel decide: converter ou avisar
                 casting = null
-                Toast.makeText(appContext, "A TV não conseguiu tocar este vídeo. O formato pode não ser aceito por ela (prefira MP4).", Toast.LENGTH_LONG).show()
             }
             if (status == PlayStatus.Ended) casting = null // terminou de verdade: nada a retomar
             _playback.update { it.copy(status = status) }

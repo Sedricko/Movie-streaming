@@ -1,6 +1,8 @@
 package app.lumicast.domain
 
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.emptyFlow
 
 /**
  * Fonte de bytes de um vídeo que pode ainda estar sendo baixado.
@@ -57,6 +59,9 @@ interface CastGateway {
     suspend fun play(device: CastDevice, video: TgVideo, streamUrl: String)
     suspend fun togglePause()
     suspend fun seekTo(seconds: Int)
+
+    /** A TV recusou o vídeo antes de começar a tocar (formato/codec que ela não aceita). */
+    val formatErrors: Flow<TgVideo> get() = emptyFlow()
 
     /** Volume da TV, 0f..1f. Pode lançar UnsupportedOperationException se a TV não deixar. */
     suspend fun setVolume(level: Float)

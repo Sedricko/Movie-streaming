@@ -80,4 +80,6 @@ data class AppSettings(
     val dlna: Boolean = true,
     /** Com o app aberto e transmitindo, as teclas de volume do celular mudam o volume da TV. */
     val volumeKeys: Boolean = true,
+    /** Se a TV recusar o formato (MKV, HEVC, AC3…), converter para MP4 no celular e transmitir o convertido. */
+    val autoConvert: Boolean = true,
 )

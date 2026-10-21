@@ -6,6 +6,8 @@ import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.lumicast.data.library.SavedVideoSource
+import app.lumicast.data.library.VideoConverter
+import android.net.Uri
 import app.lumicast.data.library.saveToDownloads
 import app.lumicast.data.stream.RangeStreamServer
 import app.lumicast.data.stream.findLanIPv4
@@ -67,6 +69,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             autoNext = prefs.getBoolean("set.autoNext", true),
             dlna = prefs.getBoolean("set.dlna", true),
             volumeKeys = prefs.getBoolean("set.volumeKeys", true),
+            autoConvert = prefs.getBoolean("set.autoConvert", true),
         ),
     )
     val settings: StateFlow<AppSettings> = _settings.asStateFlow()
@@ -77,6 +80,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         prefs.edit()
             .putBoolean("set.resume", new.resume).putBoolean("set.autoNext", new.autoNext)
             .putBoolean("set.dlna", new.dlna).putBoolean("set.volumeKeys", new.volumeKeys)
+            .putBoolean("set.autoConvert", new.autoConvert)
             .commit() // commit: o MultiCastGateway lê "set.dlna" logo em seguida
         if (dlnaChanged) cast.startDiscovery()
     }
@@ -154,6 +158,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 if (status == PlayStatus.Ended) queueDevice?.let { advance(it, stopIfNothing = false) }
             }
         }
+        viewModelScope.launch { cast.formatErrors.collect(::onFormatError) }
         // Guarda até onde cada vídeo foi assistido (a cada 1% e no fim).
         viewModelScope.launch {
             cast.playback.collect { p ->
@@ -441,10 +446,65 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Vídeo já salvo na galeria por este app: transmitir do arquivo, sem baixar do Telegram de novo. */
     private fun savedSource(video: TgVideo): StreamSource? {
+        convertedSource(video)?.let { return it }
         val uri = prefs.getString(savedKey(video), null) ?: return null
         val source = SavedVideoSource.open(getApplication(), uri, video.mimeType)
         if (source == null) prefs.edit().remove(savedKey(video)).apply() // apagaram da galeria: volta a usar o Telegram
         return source
+    }
+
+    private fun convertedKey(video: TgVideo) = "conv:${video.chatId}:${video.messageId}"
+
+    /** Versão MP4 já convertida deste vídeo (o Android pode apagar o cache: aí some e converte de novo se preciso). */
+    private fun convertedSource(video: TgVideo): StreamSource? {
+        val uri = prefs.getString(convertedKey(video), null) ?: return null
+        val source = SavedVideoSource.open(getApplication(), uri, "video/mp4")
+        if (source == null) prefs.edit().remove(convertedKey(video)).apply()
+        return source
+    }
+
+    private val converter = VideoConverter(app)
+    private var convertJob: Job? = null
+
+    /** "Convertendo para MP4: 40%", ou null. Mostrado na aba TV. */
+    private val _conversion = MutableStateFlow<String?>(null)
+    val conversion: StateFlow<String?> = _conversion.asStateFlow()
+
+    fun cancelConversion() {
+        convertJob?.cancel()
+    }
+
+    /** A TV recusou o formato: converte para MP4 (se ligado) e transmite o convertido na mesma TV. */
+    private fun onFormatError(video: TgVideo) {
+        val device = queueDevice ?: return
+        val msg = "A TV não aceitou o formato deste vídeo."
+        when {
+            !_settings.value.autoConvert -> Toast.makeText(getApplication(), "$msg Ligue \"Converter formato\" nas Configurações.", Toast.LENGTH_LONG).show()
+            convertedSource(video)?.also { it.close() } != null ->
+                Toast.makeText(getApplication(), "$msg Nem a versão convertida tocou nesta TV.", Toast.LENGTH_LONG).show()
+            convertJob?.isActive == true -> Unit
+            else -> convertJob = viewModelScope.launch {
+                Diag.log("convert", "file=${video.fileId} (${video.mimeType}) recusado pela TV: convertendo")
+                try {
+                    _conversion.value = "Baixando “${video.title}” para converter…"
+                    val input = prefs.getString(savedKey(video), null)?.let(Uri::parse) ?: Uri.fromFile(File(telegram.download(video)))
+                    val out = File(getApplication<Application>().cacheDir, "convertidos/${video.chatId}_${video.messageId}.mp4")
+                    converter.toMp4(input, out) { p -> _conversion.value = "Convertendo para MP4: $p%" }
+                    prefs.edit().putString(convertedKey(video), Uri.fromFile(out).toString()).apply()
+                    Diag.log("convert", "file=${video.fileId} convertido (${out.length()} B)")
+                    _conversion.value = null
+                    convertJob = null // o castTo abaixo não deve cancelar a si mesmo
+                    castTo(video, device)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Diag.log("convert", "falhou: ${e.stackTraceToString().take(600)}")
+                    Toast.makeText(getApplication(), "Não deu para converter este vídeo (${e.message}).", Toast.LENGTH_LONG).show()
+                } finally {
+                    _conversion.value = null
+                }
+            }
+        }
     }
 
     fun togglePin(chat: TgChat) {
@@ -505,6 +565,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** TDLib (download progressivo) → servidor HTTP local na LAN → TV. No modo demonstração, só simula. */
     fun castTo(original: TgVideo, device: CastDevice) = viewModelScope.launch {
+        convertJob?.cancel() // escolheu outro vídeo: esquecer a conversão em andamento
         val start = _trimStart.value
         val saved = _progress.value[keyOf(original)]
         // Os gateways começam em duração × resumeFraction. Ordem: continuar de onde parou → "Começar em" → início.
@@ -531,7 +592,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             streaming = video to url
             streamSource = source
             progressJob = viewModelScope.launch { while (true) { downloaded.value = source.downloadedFraction; delay(1_000) } }
-            cast.play(device, video, url)
+            cast.play(device, video.copy(mimeType = source.mimeType, sizeBytes = source.sizeBytes), url)
             Diag.log("vm", "transmitindo file=${video.fileId} (${video.mimeType}, ${video.sizeBytes} B) em ${device.protocol}")
         }.onFailure {
             endStream()
@@ -551,6 +612,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun togglePause() = viewModelScope.launch { cast.togglePause() }
     fun seekTo(sec: Int) = viewModelScope.launch { cast.seekTo(sec) }
     fun stop() = viewModelScope.launch {
+        convertJob?.cancel()
         switchJob?.cancel()
         queueDevice = null // parar à mão não puxa o próximo da fila
         cast.stop()

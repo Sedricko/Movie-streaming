@@ -46,6 +46,9 @@ fun TvScreen(
     /** Há fila ou "próximo episódio automático" ligado. */
     canSkipNext: Boolean,
     onVolume: (Float) -> Unit,
+    /** "Convertendo para MP4: 40%" enquanto o conversor trabalha, ou null. */
+    conversion: String?,
+    onCancelConversion: () -> Unit,
     onSpeed: (Float) -> Unit,
     queue: List<TgVideo>,
     scheduledAt: Long?,
@@ -76,6 +79,20 @@ fun TvScreen(
                 Text(tv?.name ?: "Nenhuma escolhida", style = MaterialTheme.typography.titleMedium)
             }
             TextButton(onClick = { picking = true }) { Text(if (tv == null) "Escolher" else "Trocar") }
+        }
+
+        conversion?.let {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(it, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                    Text(
+                        "A TV não aceitou o formato original. Ao terminar, começa a tocar sozinho.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                TextButton(onClick = onCancelConversion) { Text("Cancelar") }
+            }
         }
 
         NowPlayingSection(

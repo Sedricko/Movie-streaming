@@ -8,10 +8,12 @@ import app.lumicast.domain.TgVideo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.stateIn
 
 /** Uma lista só de TVs (Google Cast + DLNA); cada comando vai para quem está tocando. */
@@ -32,6 +34,8 @@ class MultiCastGateway(
     override val playback: StateFlow<PlaybackState> =
         combine(google.playback, dlna.playback, active) { g, d, a -> if (a == CastProtocol.Dlna) d else g }
             .stateIn(scope, SharingStarted.Eagerly, PlaybackState())
+
+    override val formatErrors: Flow<TgVideo> = merge(google.formatErrors, dlna.formatErrors)
 
     private fun now() = if (active.value == CastProtocol.Dlna) dlna else google
 
