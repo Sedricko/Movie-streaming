@@ -19,6 +19,7 @@ data class TgVideo(
     val mimeType: String,
     /** 0f..1f — quanto já foi assistido (para "retomar"). */
     val resumeFraction: Float = 0f,
+    val thumbnailFileId: Int? = null,
 )
 
 enum class CastProtocol(val label: String) {

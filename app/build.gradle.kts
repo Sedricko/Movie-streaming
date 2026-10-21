@@ -72,6 +72,8 @@ dependencies {
     implementation(libs.ktor.server.cio)
     implementation(libs.cast.framework)
     implementation(libs.androidx.mediarouter)
+    implementation(libs.media3.exoplayer)
+    implementation(libs.media3.ui)
     debugImplementation(libs.compose.ui.tooling)
 
     testImplementation(libs.junit)

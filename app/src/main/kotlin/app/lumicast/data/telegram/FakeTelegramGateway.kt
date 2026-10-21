@@ -65,4 +65,6 @@ class FakeTelegramGateway : TelegramGateway {
         throw UnsupportedOperationException("Modo demonstração: sem streaming real (marco M2).")
 
     override suspend fun closeStream(video: TgVideo) = Unit
+
+    override suspend fun thumbnail(video: TgVideo): String? = null
 }

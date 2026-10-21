@@ -10,6 +10,9 @@ interface StreamSource {
     val sizeBytes: Long
     val mimeType: String
 
+    /** Parte do arquivo já baixada, 0f..1f. */
+    val downloadedFraction: Float get() = 1f
+
     /** Lê até [length] bytes a partir de [offset] para [buffer]. Retorna o nº de bytes lidos, ou -1 no fim/erro. */
     suspend fun read(offset: Long, buffer: ByteArray, length: Int): Int
 }
@@ -27,6 +30,9 @@ interface TelegramGateway {
     /** Inicia o download progressivo e devolve a fonte que o servidor local vai servir. */
     suspend fun openStream(video: TgVideo): StreamSource
     suspend fun closeStream(video: TgVideo)
+
+    /** Caminho local da miniatura (baixa se preciso), ou null se o vídeo não tem. */
+    suspend fun thumbnail(video: TgVideo): String?
 }
 
 interface CastGateway {

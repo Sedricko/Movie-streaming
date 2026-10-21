@@ -1,5 +1,7 @@
 package app.lumicast.ui.components
 
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -14,12 +16,22 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.rounded.StarBorder
 import androidx.compose.material.icons.rounded.Tv
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -33,7 +45,7 @@ import app.lumicast.ui.theme.LumiShapes
 import app.lumicast.ui.theme.LumiTheme
 
 @Composable
-fun ChatRow(chat: TgChat, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun ChatRow(chat: TgChat, pinned: Boolean, onClick: () -> Unit, onTogglePin: () -> Unit, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -65,11 +77,21 @@ fun ChatRow(chat: TgChat, onClick: () -> Unit, modifier: Modifier = Modifier) {
                 )
             }
         }
+        IconButton(onClick = onTogglePin) {
+            Icon(
+                if (pinned) Icons.Rounded.Star else Icons.Rounded.StarBorder,
+                contentDescription = if (pinned) "Desafixar ${chat.title}" else "Fixar ${chat.title} no topo",
+                tint = if (pinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 
 @Composable
-fun VideoRow(video: TgVideo, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun VideoRow(video: TgVideo, loadThumbnail: suspend (TgVideo) -> String?, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val thumb by produceState<ImageBitmap?>(null, video.fileId) {
+        value = loadThumbnail(video)?.let { path -> withContext(Dispatchers.IO) { BitmapFactory.decodeFile(path)?.asImageBitmap() } }
+    }
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -85,7 +107,7 @@ fun VideoRow(video: TgVideo, onClick: () -> Unit, modifier: Modifier = Modifier)
                 .background(MaterialTheme.colorScheme.surfaceVariant),
             contentAlignment = Alignment.Center,
         ) {
-            // M2: trocar por miniatura real do Telegram.
+            thumb?.let { Image(it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
             Icon(Icons.Rounded.PlayArrow, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             if (video.resumeFraction in 0.01f..0.99f) {
                 Box(

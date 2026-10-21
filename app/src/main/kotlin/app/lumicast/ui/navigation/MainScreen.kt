@@ -27,6 +27,7 @@ import androidx.navigation.compose.rememberNavController
 import app.lumicast.MainViewModel
 import app.lumicast.domain.AuthState
 import app.lumicast.ui.components.MiniPlayer
+import app.lumicast.ui.components.PreviewPlayer
 import app.lumicast.ui.screens.DevicesScreen
 import app.lumicast.ui.screens.LibraryScreen
 import app.lumicast.ui.screens.LoginScreen
@@ -64,6 +65,10 @@ fun MainScreen(vm: MainViewModel) {
     val videos by vm.videos.collectAsStateWithLifecycle()
     val devices by vm.devices.collectAsStateWithLifecycle()
     val playback by vm.playback.collectAsStateWithLifecycle()
+    val pinned by vm.pinned.collectAsStateWithLifecycle()
+    val previewUrl by vm.previewUrl.collectAsStateWithLifecycle()
+
+    previewUrl?.let { PreviewPlayer(it, onDismiss = { vm.endPreview() }) }
 
     fun go(tab: Tab) = nav.navigate(tab.route) {
         popUpTo(nav.graph.findStartDestination().id) { saveState = true }
@@ -103,6 +108,10 @@ fun MainScreen(vm: MainViewModel) {
                     openChat = openChat,
                     videos = videos,
                     devices = devices,
+                    pinned = pinned,
+                    onTogglePin = vm::togglePin,
+                    loadThumbnail = vm::thumbnail,
+                    onPreview = vm::preview,
                     onOpenChat = vm::open,
                     onBack = vm::closeChat,
                     onLogout = vm::logout,
