@@ -45,6 +45,12 @@ interface TelegramGateway {
     /** Quanto do arquivo já está no celular, 0f..1f (para mostrar o progresso de um download). */
     fun downloadedFraction(video: TgVideo): Float
 
+    /** Espaço que o cache do Telegram ocupa neste celular, em bytes. */
+    suspend fun cacheBytes(): Long
+
+    /** Apaga do cache do Telegram até sobrar no máximo [keepBytes] (0 = apagar tudo que não estiver em uso). */
+    suspend fun trimCache(keepBytes: Long)
+
     /** Apaga a cópia do cache do Telegram (depois de salvar na galeria, para não ocupar o dobro). */
     suspend fun releaseLocal(video: TgVideo)
 
@@ -59,7 +65,10 @@ interface CastGateway {
     fun startDiscovery()
     fun stopDiscovery()
 
-    suspend fun play(device: CastDevice, video: TgVideo, streamUrl: String)
+    suspend fun play(device: CastDevice, video: TgVideo, streamUrl: String, imageUrl: String? = null, subtitleUrl: String? = null)
+
+    /** Mostra uma imagem na TV (a tela "conectado"), mantendo a conexão aberta. */
+    suspend fun showImage(device: CastDevice, imageUrl: String, title: String)
     suspend fun togglePause()
     suspend fun seekTo(seconds: Int)
 

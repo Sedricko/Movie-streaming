@@ -92,7 +92,18 @@ fun MainScreen(vm: MainViewModel) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val conversion by vm.conversion.collectAsStateWithLifecycle()
     var showSettings by remember { mutableStateOf(false) }
-    if (showSettings) SettingsSheet(settings, onChange = vm::updateSettings, onDismiss = { showSettings = false })
+    val storage by vm.storage.collectAsStateWithLifecycle()
+    if (showSettings) {
+        LaunchedEffect(Unit) { vm.refreshStorage() }
+        SettingsSheet(
+            settings,
+            onChange = vm::updateSettings,
+            storage = storage,
+            onClearTelegram = vm::clearTelegramCache,
+            onClearConverted = vm::clearConverted,
+            onDismiss = { showSettings = false },
+        )
+    }
 
     previewUrl?.let { PreviewPlayer(it, onDismiss = { vm.endPreview() }) }
 
@@ -157,9 +168,10 @@ fun MainScreen(vm: MainViewModel) {
                     onLogout = vm::logout,
                     onCast = vm::castTo,
                     onGoToPlaying = { go(Tab.Tv) },
-                    castActive = playback.video != null,
+                    castActive = playback.video != null || playback.device != null,
                     castConnecting = playback.status in listOf(PlayStatus.Connecting, PlayStatus.Buffering, PlayStatus.Reconnecting),
-                    castStatus = playback.device?.takeIf { playback.video != null }?.let { tv ->
+                    castStatus = playback.device?.takeIf { playback.video == null }?.let { "● Conectado à ${it.name}" }
+                        ?: playback.device?.takeIf { playback.video != null }?.let { tv ->
                         when (playback.status) {
                             PlayStatus.Connecting, PlayStatus.Buffering -> "Conectando à ${tv.name}…"
                             PlayStatus.Reconnecting -> "Conexão instável. Reconectando à ${tv.name}…"

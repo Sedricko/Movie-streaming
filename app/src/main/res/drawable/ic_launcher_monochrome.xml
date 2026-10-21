@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 13+ "ícones temáticos": uma cor só, o sistema pinta. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <group android:scaleX="0.83" android:scaleY="0.83" android:pivotX="54" android:pivotY="54">
+        <path android:fillColor="#FFFFFFFF" android:fillAlpha="0.5" android:pathData="M26,50.5 L50,39 L50,69 L26,57.5 Z" />
+        <path android:fillColor="#FFFFFFFF" android:fillType="evenOdd"
+            android:pathData="M57,35 H80 A7,7 0 0 1 87,42 V66 A7,7 0 0 1 80,73 H57 A7,7 0 0 1 50,66 V42 A7,7 0 0 1 57,35 Z M58.5,39.5 H78.5 A4,4 0 0 1 82.5,43.5 V64.5 A4,4 0 0 1 78.5,68.5 H58.5 A4,4 0 0 1 54.5,64.5 V43.5 A4,4 0 0 1 58.5,39.5 Z" />
+        <path android:fillColor="#FFFFFFFF" android:pathData="M64,47.6 Q64,45.6 65.7,46.6 L74.2,52.3 Q75.8,53.4 74.2,54.5 L65.7,60.2 Q64,61.2 64,59.2 Z" />
+        <path android:fillColor="#FFFFFFFF" android:pathData="M21,54 a5.5,5.5 0 1,0 11,0 a5.5,5.5 0 1,0 -11,0" />
+    </group>
+</vector>

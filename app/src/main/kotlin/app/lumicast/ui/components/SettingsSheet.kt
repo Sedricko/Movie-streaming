@@ -17,13 +17,29 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import app.lumicast.domain.AppSettings
+import app.lumicast.domain.StorageInfo
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.TextButton
+import app.lumicast.domain.ThemeMode
+import androidx.compose.material3.FilterChip
 
 /** Configurações: um interruptor por recurso automático, com uma frase dizendo o que ele faz. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsSheet(settings: AppSettings, onChange: (AppSettings) -> Unit, onDismiss: () -> Unit) {
+fun SettingsSheet(
+    settings: AppSettings,
+    onChange: (AppSettings) -> Unit,
+    storage: StorageInfo?,
+    onClearTelegram: () -> Unit,
+    onClearConverted: () -> Unit,
+    onDismiss: () -> Unit,
+) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Column(
+            Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
             Text("Configurações", style = MaterialTheme.typography.titleLarge)
             SettingSwitch(
                 "Continuar de onde parou",
@@ -50,6 +66,36 @@ fun SettingsSheet(settings: AppSettings, onChange: (AppSettings) -> Unit, onDism
                 "Se a TV recusar o vídeo (ex.: MKV ou HEVC), o celular converte para MP4 e transmite. Leva alguns minutos; o convertido fica guardado.",
                 settings.autoConvert,
             ) { onChange(settings.copy(autoConvert = it)) }
+            SettingSwitch(
+                "Mostrar o logo na TV ao conectar",
+                "Ao escolher a TV, ela mostra “Lumicast conectado” até você mandar um vídeo, e volta a mostrar quando a fila acaba.",
+                settings.showSplash,
+            ) { onChange(settings.copy(showSplash = it)) }
+            Column {
+                Text("Tema", style = MaterialTheme.typography.titleMedium)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(ThemeMode.System to "Do sistema", ThemeMode.Light to "Claro", ThemeMode.Dark to "Escuro").forEach { (mode, label) ->
+                        FilterChip(selected = settings.theme == mode, onClick = { onChange(settings.copy(theme = mode)) }, label = { Text(label) })
+                    }
+                }
+            }
+
+            Text("Armazenamento", style = MaterialTheme.typography.titleLarge)
+            StorageRow("Cache do Telegram", "Vídeos vistos ou transmitidos, guardados para não baixar de novo.", storage?.telegramBytes, "Limpar", onClearTelegram)
+            StorageRow("Vídeos convertidos", "Versões MP4 feitas pelo conversor.", storage?.convertedBytes, "Apagar", onClearConverted)
+            Column {
+                Text("Limite do cache do Telegram", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Passou do limite, os vídeos mais antigos saem do cache ao parar de transmitir. Os salvos na galeria nunca são apagados.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(0 to "Sem limite", 2 to "2 GB", 5 to "5 GB", 10 to "10 GB").forEach { (gb, label) ->
+                        FilterChip(selected = settings.cacheLimitGb == gb, onClick = { onChange(settings.copy(cacheLimitGb = gb)) }, label = { Text(label) })
+                    }
+                }
+            }
         }
     }
 }
@@ -66,5 +112,16 @@ private fun SettingSwitch(title: String, description: String, checked: Boolean, 
             Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Switch(checked = checked, onCheckedChange = null) // a linha inteira é o toque (acessível com TalkBack)
+    }
+}
+
+@Composable
+private fun StorageRow(title: String, description: String, bytes: Long?, action: String, onAction: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text("$title · ${bytes?.let(::formatSize) ?: "calculando…"}", style = MaterialTheme.typography.titleMedium)
+            Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        TextButton(onClick = onAction, enabled = (bytes ?: 0) > 0) { Text(action) }
     }
 }

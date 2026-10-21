@@ -201,6 +201,22 @@ class TdlibTelegramGateway(context: Context) : TelegramGateway {
         return if (f.local.isDownloadingCompleted) 1f else if (size > 0) f.local.downloadedSize.toFloat() / size else 0f
     }
 
+    override suspend fun cacheBytes(): Long = (send(TdApi.GetStorageStatisticsFast()) as TdApi.StorageStatisticsFast).filesSize
+
+    override suspend fun trimCache(keepBytes: Long) {
+        // -1 nos limites do TDLib quer dizer "padrão dele" (ex.: apagar o que tem mais de 1 dia): por isso valores explícitos.
+        send(
+            TdApi.OptimizeStorage().apply {
+                size = keepBytes
+                ttl = if (keepBytes == 0L) 0 else Int.MAX_VALUE
+                count = if (keepBytes == 0L) 0 else Int.MAX_VALUE
+                immunityDelay = 0
+                returnDeletedFileStatistics = false
+                chatLimit = 0
+            },
+        )
+    }
+
     override suspend fun releaseLocal(video: TgVideo) {
         runCatching { send(TdApi.DeleteFile(video.fileId)) }
     }
