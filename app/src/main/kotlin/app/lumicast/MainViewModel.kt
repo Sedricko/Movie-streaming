@@ -13,7 +13,9 @@ import app.lumicast.domain.PlayStatus
 import app.lumicast.domain.TgChat
 import app.lumicast.domain.TgVideo
 import app.lumicast.domain.VideoFolder
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
@@ -134,25 +136,56 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         addToFolder(toId, video)
     }
 
+    private var downloadJob: Job? = null
+
     /** Baixa todos os vídeos da pasta para Downloads/Lumicast/<pasta>. */
-    fun downloadFolder(folderId: String) = viewModelScope.launch {
-        val folder = folders.value.firstOrNull { it.id == folderId } ?: return@launch
-        if (!container.realMode || _downloadStatus.value != null) return@launch
+    fun downloadFolder(folderId: String) {
+        folders.value.firstOrNull { it.id == folderId }?.let { downloadAll(it.name, it.videos) }
+    }
+
+    /** Baixa todos os vídeos do chat aberto para Downloads/Lumicast/<chat>. */
+    fun downloadChat() {
+        _openChat.value?.let { downloadAll(it.title, _videos.value) }
+    }
+
+    fun cancelDownload() {
+        downloadJob?.cancel()
+    }
+
+    /** Um vídeo por vez: terminou um, começa o próximo, até acabar a lista (ou o usuário cancelar). */
+    private fun downloadAll(name: String, list: List<TgVideo>) {
+        if (!container.realMode || downloadJob?.isActive == true) return
+        val videos = list.distinctBy { it.fileId } // o mesmo arquivo pode estar em duas mensagens
+        if (videos.isEmpty()) return
         // shortcut: o download vive no ViewModel; se o Android matar o app no meio, refaça (WorkManager resolveria).
-        var done = 0
-        folder.videos.forEachIndexed { i, video ->
-            _downloadStatus.value = "Baixando ${i + 1} de ${folder.videos.size}: ${video.title}"
-            runCatching {
-                val path = telegram.download(video)
-                withContext(Dispatchers.IO) { saveToDownloads(getApplication(), File(path), folder.name, video.title, video.mimeType) }
-                if (streaming?.first?.fileId != video.fileId && previewing?.first?.fileId != video.fileId) telegram.releaseLocal(video)
-                done++
-            }.onFailure { Diag.log("download", "falhou ${video.fileId}: ${it.message}") }
+        downloadJob = viewModelScope.launch {
+            var done = 0
+            var current: TgVideo? = null
+            try {
+                videos.forEachIndexed { i, video ->
+                    current = video
+                    _downloadStatus.value = "Baixando ${i + 1} de ${videos.size}: ${video.title}"
+                    runCatching {
+                        val path = telegram.download(video)
+                        withContext(Dispatchers.IO) { saveToDownloads(getApplication(), File(path), name, video.title, video.mimeType) }
+                        if (streaming?.first?.fileId != video.fileId && previewing?.first?.fileId != video.fileId) telegram.releaseLocal(video)
+                        done++
+                    }.onFailure {
+                        if (it is CancellationException) throw it
+                        Diag.log("download", "falhou ${video.fileId}: ${it.message}")
+                    }
+                }
+                val msg = if (done == videos.size) "Vídeos salvos em Downloads/Lumicast/$name."
+                else "Baixados $done de ${videos.size}. Confira a internet e o espaço livre e tente de novo."
+                Toast.makeText(getApplication(), msg, Toast.LENGTH_LONG).show()
+            } catch (e: CancellationException) {
+                current?.let { withContext(NonCancellable) { telegram.closeStream(it) } } // parar o download no TDLib também
+                Toast.makeText(getApplication(), "Download cancelado. $done de ${videos.size} já estão em Downloads/Lumicast/$name.", Toast.LENGTH_LONG).show()
+                throw e
+            } finally {
+                _downloadStatus.value = null
+            }
         }
-        _downloadStatus.value = null
-        val msg = if (done == folder.videos.size) "Pasta salva em Downloads/Lumicast/${folder.name}."
-        else "Baixados $done de ${folder.videos.size}. Confira a internet e o espaço livre e tente de novo."
-        Toast.makeText(getApplication(), msg, Toast.LENGTH_LONG).show()
     }
 
     fun enqueue(video: TgVideo) {

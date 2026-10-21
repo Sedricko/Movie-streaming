@@ -104,11 +104,14 @@ fun LibraryScreen(
                 }
                 IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Rounded.Delete, "Apagar pasta") }
             } else if (openChat != null) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Voltar para a lista de chats")
                     }
-                    Text(openChat.title, style = MaterialTheme.typography.titleLarge)
+                    Text(openChat.title, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                IconButton(onClick = folderActions.downloadChat, enabled = downloadStatus == null && videos.isNotEmpty()) {
+                    Icon(Icons.Rounded.Download, "Baixar todos os vídeos deste chat, um por vez")
                 }
             } else {
                 Text("Olá, $userName", style = MaterialTheme.typography.titleLarge)
@@ -135,7 +138,10 @@ fun LibraryScreen(
         )
 
         downloadStatus?.let {
-            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 20.dp))
+            Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
+                TextButton(onClick = folderActions.cancelDownload) { Text("Cancelar") }
+            }
         }
 
         if (openChat == null && openFolder == null) {
@@ -171,7 +177,7 @@ fun LibraryScreen(
                     if (openFolder != null) "Toque num vídeo de um chat e escolha “Adicionar à pasta”." else "Envie um vídeo pelo Telegram e ele aparece aqui.",
                 )
             } else {
-                LazyColumn { items(shown, key = { it.fileId }) { VideoRow(it, loadThumbnail, onClick = { pending = it }) } }
+                LazyColumn { items(shown, key = { "${it.chatId}:${it.messageId}" }) { VideoRow(it, loadThumbnail, onClick = { pending = it }) } }
             }
         }
     }
