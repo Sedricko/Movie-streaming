@@ -27,6 +27,13 @@ android {
         buildConfigField("String", "TELEGRAM_API_HASH", "\"${localProps.getProperty("TELEGRAM_API_HASH") ?: ""}\"")
     }
 
+    signingConfigs {
+        getByName("debug") {
+            // CI: chave de debug fixa (cache do Actions) para o APK novo instalar por cima; localmente usa a padrão.
+            System.getenv("LUMICAST_DEBUG_KEYSTORE")?.let { storeFile = file(it) }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true

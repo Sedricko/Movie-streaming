@@ -50,8 +50,14 @@ jobs:
       - name: Chave de assinatura fixa
         uses: actions/cache/restore@v4
         with:
-          path: ~/.android/debug.keystore
-          key: android-debug-keystore-v1
+          path: ~/lumicast-debug.keystore
+          key: lumicast-debug-keystore-v2
+      - name: Criar a chave (só se o cache ainda não tiver)
+        run: |
+          test -f ~/lumicast-debug.keystore || keytool -genkeypair -keystore ~/lumicast-debug.keystore \
+            -alias androiddebugkey -storepass android -keypass android -keyalg RSA -keysize 2048 \
+            -validity 36500 -dname "CN=Android Debug,O=Android,C=US"
+          echo "LUMICAST_DEBUG_KEYSTORE=$HOME/lumicast-debug.keystore" >> "$GITHUB_ENV"
       - name: Versões estáveis mais recentes (referência)
         continue-on-error: true
         run: |
@@ -72,7 +78,7 @@ jobs:
         continue-on-error: true # já guardada → o GitHub recusa regravar a mesma chave de cache, e tudo bem
         uses: actions/cache/save@v4
         with:
-          path: ~/.android/debug.keystore
-          key: android-debug-keystore-v1
+          path: ~/lumicast-debug.keystore
+          key: lumicast-debug-keystore-v2
       - uses: actions/upload-artifact@v4
         with: { name: lumicast-debug-apk, path: app/build/outputs/apk/debug/*.apk }
