@@ -46,6 +46,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.lumicast.domain.CastDevice
 import app.lumicast.domain.TgVideo
+import app.lumicast.domain.compareNatural
 import app.lumicast.ui.components.formatDuration
 import app.lumicast.ui.components.parseClock
 import app.lumicast.ui.components.formatClockDigits
@@ -82,9 +83,12 @@ fun QueueSection(
     onCancelSchedule: () -> Unit,
     onDownloadQueue: () -> Unit,
     onClearQueue: () -> Unit,
+    onSort: (descending: Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var showOptions by remember { mutableStateOf(false) }
+    // Já está 1→9? Então o próximo toque inverte (9→1).
+    val ascending = queue.size > 1 && queue.zipWithNext().all { (a, b) -> compareNatural(a.title, b.title) <= 0 }
     var dragIndex by remember { mutableStateOf<Int?>(null) }
     var dragOffset by remember { mutableFloatStateOf(0f) }
     val rowPx = with(LocalDensity.current) { (ROW_HEIGHT + ROW_GAP).toPx() } // distância entre linhas = altura + espaço da Column
@@ -96,6 +100,7 @@ fun QueueSection(
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("A seguir (${queue.size})", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
             if (queue.isNotEmpty()) {
+                if (queue.size > 1) TextButton(onClick = { onSort(ascending) }) { Text(if (ascending) "Ordenar 9→1" else "Ordenar 1→9") }
                 TextButton(onClick = onDownloadQueue) { Text("Baixar") }
                 TextButton(onClick = onClearQueue) { Text("Limpar") }
             }
