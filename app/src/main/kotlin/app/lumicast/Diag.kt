@@ -22,7 +22,9 @@ object Diag {
         crashFile = File(context.filesDir, "last-crash.txt")
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, e ->
-            runCatching { crashFile?.writeText("${Date()}\n${e.stackTraceToString()}") }
+            // os eventos ficam só na memória: gravar junto com a falha para não sumirem quando o app reabrir
+            val events = synchronized(lines) { lines.joinToString("\n") }
+            runCatching { crashFile?.writeText("${Date()}\n${e.stackTraceToString()}\n\n== Eventos antes da falha ==\n$events") }
             previous?.uncaughtException(thread, e)
         }
     }

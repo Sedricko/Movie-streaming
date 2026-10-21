@@ -171,7 +171,7 @@ fun LibraryScreen(
                     if (openFolder != null) "Toque num vídeo de um chat e escolha “Adicionar à pasta”." else "Envie um vídeo pelo Telegram e ele aparece aqui.",
                 )
             } else {
-                LazyColumn { items(shown, key = { it.fileId }) { VideoRow(it, loadThumbnail, onClick = { pending = it }) } }
+                LazyColumn { items(shown, key = { "${it.chatId}:${it.messageId}" }) { VideoRow(it, loadThumbnail, onClick = { pending = it }) } }
             }
         }
     }
