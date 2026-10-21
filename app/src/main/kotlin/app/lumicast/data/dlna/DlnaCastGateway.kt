@@ -94,7 +94,7 @@ class DlnaCastGateway(context: Context) : CastGateway {
         _devices.value = renderers.values.map { CastDevice(it.udn, it.name, CastProtocol.Dlna) }.sortedBy { it.name }
     }
 
-    override suspend fun play(device: CastDevice, video: TgVideo, streamUrl: String) = withContext(Dispatchers.IO) {
+    override suspend fun play(device: CastDevice, video: TgVideo, streamUrl: String, imageUrl: String?, subtitleUrl: String?) = withContext(Dispatchers.IO) {
         pollJob?.cancel()
         val r = renderers[device.id] ?: error("A TV saiu da rede. Procure de novo.")
         current = r
@@ -104,11 +104,21 @@ class DlnaCastGateway(context: Context) : CastGateway {
         av(
             r, "SetAVTransportURI",
             "CurrentURI" to streamUrl,
-            "CurrentURIMetaData" to didl(video.title, streamUrl, video.mimeType, video.durationSec, video.sizeBytes),
+            "CurrentURIMetaData" to didl(video.title, streamUrl, video.mimeType, video.durationSec, video.sizeBytes, albumArt = imageUrl),
         )
         av(r, "Play", "Speed" to "1")
         Diag.log("dlna", "tocando em ${r.name}")
         pollJob = scope.launch { poll(r, video, start) }
+    }
+
+    override suspend fun showImage(device: CastDevice, imageUrl: String, title: String) = withContext(Dispatchers.IO) {
+        pollJob?.cancel()
+        val r = renderers[device.id] ?: error("A TV saiu da rede. Procure de novo.")
+        current = r
+        runCatching { av(r, "Stop") }
+        av(r, "SetAVTransportURI", "CurrentURI" to imageUrl, "CurrentURIMetaData" to didl(title, imageUrl, "image/png", 0, 0, upnpClass = "object.item.imageItem.photo"))
+        av(r, "Play", "Speed" to "1")
+        _playback.value = PlaybackState(device = device, status = PlayStatus.Idle)
     }
 
     /** A cada 1 s pergunta à TV o estado e a posição (DLNA não avisa sozinho). */

@@ -65,12 +65,24 @@ internal fun escapeXml(s: String) = s.replace("&", "&amp;").replace("<", "&lt;")
 internal fun unescapeXml(s: String) = s.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"").replace("&apos;", "'").replace("&amp;", "&")
 
 /** Metadados DIDL-Lite que muitas TVs (Samsung, LG) exigem junto com a URL. */
-internal fun didl(title: String, url: String, mime: String, durationSec: Int, size: Long): String =
-    """<DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" """ +
+internal fun didl(
+    title: String,
+    url: String,
+    mime: String,
+    durationSec: Int,
+    size: Long,
+    upnpClass: String = "object.item.videoItem",
+    albumArt: String? = null,
+): String {
+    val duration = if (durationSec > 0) """ duration="${upnpTime(durationSec)}.000"""" else ""
+    val sizeAttr = if (size > 0) """ size="$size"""" else ""
+    val art = albumArt?.let { "<upnp:albumArtURI>${escapeXml(it)}</upnp:albumArtURI>" }.orEmpty()
+    return """<DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" """ +
         """xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/"><item id="0" parentID="-1" restricted="1">""" +
-        "<dc:title>${escapeXml(title)}</dc:title><upnp:class>object.item.videoItem</upnp:class>" +
-        """<res protocolInfo="http-get:*:$mime:$DLNA_FEATURES" duration="${upnpTime(durationSec)}.000" size="$size">""" +
+        "<dc:title>${escapeXml(title)}</dc:title><upnp:class>$upnpClass</upnp:class>$art" +
+        """<res protocolInfo="http-get:*:$mime:$DLNA_FEATURES"$duration$sizeAttr>""" +
         "${escapeXml(url)}</res></item></DIDL-Lite>"
+}
 
 /** Pode pedir trechos (Range), é stream e não precisa baixar tudo antes. */
 const val DLNA_FEATURES = "DLNA.ORG_OP=01;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=01700000000000000000000000000000"

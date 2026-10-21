@@ -82,7 +82,12 @@ data class AppSettings(
     val volumeKeys: Boolean = true,
     /** Se a TV recusar o formato (MKV, HEVC, AC3…), converter para MP4 no celular e transmitir o convertido. */
     val autoConvert: Boolean = true,
+    /** Ao escolher a TV (e quando a fila acaba), mostrar nela a tela "Lumicast conectado". */
+    val showSplash: Boolean = true,
+    val theme: ThemeMode = ThemeMode.System,
 )
+
+enum class ThemeMode { System, Light, Dark }
 
 /** Um download ou conversão em andamento, para a barra de progresso. [fraction] null = ainda sem porcentagem. */
 data class Transfer(val title: String, val detail: String, val fraction: Float?)

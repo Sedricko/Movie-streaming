@@ -59,7 +59,10 @@ interface CastGateway {
     fun startDiscovery()
     fun stopDiscovery()
 
-    suspend fun play(device: CastDevice, video: TgVideo, streamUrl: String)
+    suspend fun play(device: CastDevice, video: TgVideo, streamUrl: String, imageUrl: String? = null, subtitleUrl: String? = null)
+
+    /** Mostra uma imagem na TV (a tela "conectado"), mantendo a conexão aberta. */
+    suspend fun showImage(device: CastDevice, imageUrl: String, title: String)
     suspend fun togglePause()
     suspend fun seekTo(seconds: Int)
 

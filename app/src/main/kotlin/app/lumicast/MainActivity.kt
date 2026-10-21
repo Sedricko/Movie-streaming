@@ -6,6 +6,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.lumicast.domain.ThemeMode
 import app.lumicast.ui.navigation.MainScreen
 import app.lumicast.ui.theme.LumicastTheme
 
@@ -16,7 +20,13 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            LumicastTheme {
+            val settings by vm.settings.collectAsStateWithLifecycle()
+            val dark = when (settings.theme) {
+                ThemeMode.System -> isSystemInDarkTheme()
+                ThemeMode.Light -> false
+                ThemeMode.Dark -> true
+            }
+            LumicastTheme(darkTheme = dark) {
                 MainScreen(vm)
             }
         }

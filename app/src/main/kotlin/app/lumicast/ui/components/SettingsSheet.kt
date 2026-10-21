@@ -17,6 +17,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import app.lumicast.domain.AppSettings
+import app.lumicast.domain.ThemeMode
+import androidx.compose.material3.FilterChip
 
 /** Configurações: um interruptor por recurso automático, com uma frase dizendo o que ele faz. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -50,6 +52,19 @@ fun SettingsSheet(settings: AppSettings, onChange: (AppSettings) -> Unit, onDism
                 "Se a TV recusar o vídeo (ex.: MKV ou HEVC), o celular converte para MP4 e transmite. Leva alguns minutos; o convertido fica guardado.",
                 settings.autoConvert,
             ) { onChange(settings.copy(autoConvert = it)) }
+            SettingSwitch(
+                "Mostrar o logo na TV ao conectar",
+                "Ao escolher a TV, ela mostra “Lumicast conectado” até você mandar um vídeo, e volta a mostrar quando a fila acaba.",
+                settings.showSplash,
+            ) { onChange(settings.copy(showSplash = it)) }
+            Column {
+                Text("Tema", style = MaterialTheme.typography.titleMedium)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(ThemeMode.System to "Do sistema", ThemeMode.Light to "Claro", ThemeMode.Dark to "Escuro").forEach { (mode, label) ->
+                        FilterChip(selected = settings.theme == mode, onClick = { onChange(settings.copy(theme = mode)) }, label = { Text(label) })
+                    }
+                }
+            }
         }
     }
 }

@@ -9,6 +9,9 @@ import app.lumicast.data.library.SavedVideoSource
 import app.lumicast.data.library.VideoConverter
 import android.net.Uri
 import app.lumicast.data.library.saveToDownloads
+import app.lumicast.data.cast.renderConnectedSplash
+import app.lumicast.data.stream.BytesSource
+import app.lumicast.domain.ThemeMode
 import app.lumicast.data.stream.RangeStreamServer
 import app.lumicast.data.stream.findLanIPv4
 import app.lumicast.domain.AppSettings
@@ -61,9 +64,33 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val selectedTv: StateFlow<CastDevice?> = combine(devices, _selectedTvId) { ds, id -> ds.firstOrNull { it.id == id } ?: ds.singleOrNull() }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
+    /** Escolheu a TV na lista: lembra e, se nada estiver tocando, mostra nela a tela "conectado". */
     fun selectTv(device: CastDevice) {
+        rememberTv(device)
+        if (playback.value.video == null) showSplash(device)
+    }
+
+    private fun rememberTv(device: CastDevice) {
         _selectedTvId.value = device.id
         prefs.edit().putString("tv", device.id).apply()
+    }
+
+    private var splashUrl: String? = null
+
+    /** Tela "Lumicast conectado" na TV (configurável). Também encerra o stream que estava aberto. */
+    private fun showSplash(device: CastDevice) {
+        if (!_settings.value.showSplash || !container.realMode) return
+        viewModelScope.launch {
+            runCatching {
+                endStream()
+                val srv = ensureServer()
+                splashUrl?.let(srv::unregister)
+                val png = withContext(Dispatchers.Default) { renderConnectedSplash(getApplication(), device.name) }
+                val url = srv.register(BytesSource(png, "image/png")).also { splashUrl = it }
+                cast.showImage(device, url, "Lumicast conectado")
+                queueDevice = device
+            }.onFailure { Diag.log("splash", "não mostrou: ${it.message}") } // detalhe visual: não incomodar com aviso
+        }
     }
 
     private val _settings = MutableStateFlow(
@@ -73,6 +100,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             dlna = prefs.getBoolean("set.dlna", true),
             volumeKeys = prefs.getBoolean("set.volumeKeys", true),
             autoConvert = prefs.getBoolean("set.autoConvert", true),
+            showSplash = prefs.getBoolean("set.showSplash", true),
+            theme = runCatching { ThemeMode.valueOf(prefs.getString("set.theme", null)!!) }.getOrDefault(ThemeMode.System),
         ),
     )
     val settings: StateFlow<AppSettings> = _settings.asStateFlow()
@@ -84,6 +113,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             .putBoolean("set.resume", new.resume).putBoolean("set.autoNext", new.autoNext)
             .putBoolean("set.dlna", new.dlna).putBoolean("set.volumeKeys", new.volumeKeys)
             .putBoolean("set.autoConvert", new.autoConvert)
+            .putBoolean("set.showSplash", new.showSplash).putString("set.theme", new.theme.name)
             .commit() // commit: o MultiCastGateway lê "set.dlna" logo em seguida
         if (dlnaChanged) cast.startDiscovery()
     }
@@ -158,7 +188,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         // Vídeo terminou na TV → próximo da fila na mesma TV.
         viewModelScope.launch {
             cast.playback.map { it.status }.distinctUntilChanged().collect { status ->
-                if (status == PlayStatus.Ended) queueDevice?.let { advance(it, stopIfNothing = false) }
+                // só vídeo "termina": a imagem de "conectado" não pode puxar a fila
+                if (status == PlayStatus.Ended && cast.playback.value.video != null) queueDevice?.let { advance(it, stopIfNothing = false) }
             }
         }
         viewModelScope.launch { cast.formatErrors.collect(::onFormatError) }
@@ -382,6 +413,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 cast.playback.value.video?.let { history.addLast(it) }
                 castTo(next, device)
             }
+            _settings.value.showSplash -> showSplash(device) // acabou tudo: a TV volta a mostrar "conectado"
             stopIfNothing -> stop()
         }
     }
@@ -526,11 +558,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun thumbnail(video: TgVideo): String? = runCatching { telegram.thumbnail(video) }.getOrNull()
 
     /** Abre o stream do Telegram no servidor local e devolve a URL (a TV e o player do celular usam a mesma). */
+    private suspend fun ensureServer(): RangeStreamServer = server ?: run {
+        val ip = findLanIPv4(getApplication()) ?: error("Sem Wi-Fi. Conecte o celular à mesma rede da TV.")
+        RangeStreamServer(ip).also { it.start(); server = it }
+    }
+
+    /** Miniatura do vídeo servida para a TV mostrar enquanto carrega (null se não houver). */
+    private suspend fun thumbnailUrl(video: TgVideo): String? {
+        val path = runCatching { telegram.thumbnail(video) }.getOrNull() ?: return null
+        val source = SavedVideoSource.open(getApplication(), Uri.fromFile(File(path)).toString(), "image/jpeg") ?: return null
+        return ensureServer().register(source)
+    }
+
     private suspend fun serve(video: TgVideo): Pair<String, StreamSource> {
-        val srv = server ?: run {
-            val ip = findLanIPv4(getApplication()) ?: error("Sem Wi-Fi. Conecte o celular à mesma rede da TV.")
-            RangeStreamServer(ip).also { it.start(); server = it }
-        }
+        val srv = ensureServer()
         val source = savedSource(video)?.also { Diag.log("vm", "file=${video.fileId}: usando a cópia salva no celular") }
             ?: telegram.openStream(video)
         return srv.register(source) to source
@@ -587,7 +628,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             else -> original.copy(resumeFraction = 0f)
         }
         queueDevice = device
-        if (_selectedTvId.value != device.id) selectTv(device)
+        if (_selectedTvId.value != device.id) rememberTv(device)
         switchJob?.cancel()
         val every = _switchEveryMin.value
         if (every > 0 && _queue.value.isNotEmpty()) {
@@ -603,7 +644,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             streaming = video to url
             streamSource = source
             progressJob = viewModelScope.launch { while (true) { downloaded.value = source.downloadedFraction; delay(1_000) } }
-            cast.play(device, video.copy(mimeType = source.mimeType, sizeBytes = source.sizeBytes), url)
+            cast.play(device, video.copy(mimeType = source.mimeType, sizeBytes = source.sizeBytes), url, imageUrl = thumbnailUrl(video))
             Diag.log("vm", "transmitindo file=${video.fileId} (${video.mimeType}, ${video.sizeBytes} B) em ${device.protocol}")
         }.onFailure {
             endStream()

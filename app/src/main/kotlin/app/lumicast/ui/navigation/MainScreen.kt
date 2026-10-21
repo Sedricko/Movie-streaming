@@ -157,9 +157,10 @@ fun MainScreen(vm: MainViewModel) {
                     onLogout = vm::logout,
                     onCast = vm::castTo,
                     onGoToPlaying = { go(Tab.Tv) },
-                    castActive = playback.video != null,
+                    castActive = playback.video != null || playback.device != null,
                     castConnecting = playback.status in listOf(PlayStatus.Connecting, PlayStatus.Buffering, PlayStatus.Reconnecting),
-                    castStatus = playback.device?.takeIf { playback.video != null }?.let { tv ->
+                    castStatus = playback.device?.takeIf { playback.video == null }?.let { "● Conectado à ${it.name}" }
+                        ?: playback.device?.takeIf { playback.video != null }?.let { tv ->
                         when (playback.status) {
                             PlayStatus.Connecting, PlayStatus.Buffering -> "Conectando à ${tv.name}…"
                             PlayStatus.Reconnecting -> "Conexão instável. Reconectando à ${tv.name}…"
