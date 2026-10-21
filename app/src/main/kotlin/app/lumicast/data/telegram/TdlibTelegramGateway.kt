@@ -126,6 +126,8 @@ class TdlibTelegramGateway(context: Context) : TelegramGateway {
 
     override suspend fun submitCode(code: String) = authStep(TdApi.CheckAuthenticationCode(code.trim()))
 
+    override suspend fun resendCode() = authStep(TdApi.ResendAuthenticationCode(TdApi.ResendCodeReasonUserRequest()))
+
     override suspend fun submitPassword(password: String) = authStep(TdApi.CheckAuthenticationPassword(password))
 
     override suspend fun logout() = authStep(TdApi.LogOut())
@@ -209,6 +211,8 @@ class TdlibTelegramGateway(context: Context) : TelegramGateway {
         override val sizeBytes: Long,
         override val mimeType: String,
     ) : StreamSource {
+        @Volatile private var lastMoveAt = 0L
+
         override val downloadedFraction: Float
             get() = files[fileId]?.let { f -> if (sizeBytes > 0) f.local.downloadedSize.toFloat() / sizeBytes else 0f } ?: 0f
 
@@ -233,7 +237,11 @@ class TdlibTelegramGateway(context: Context) : TelegramGateway {
                             RandomAccessFile(path, "r").use { it.seek(offset); it.read(buffer, 0, n) }
                         }
                     }
-                    if (!downloadReaches(offset)) {
+                    // A TV costuma ler começo e fim do arquivo em paralelo; o TDLib baixa um trecho por vez.
+                    // Sem esse intervalo as duas conexões "puxam" o download de um lado para o outro e nada anda.
+                    val now = System.currentTimeMillis()
+                    if (!downloadReaches(offset) && now - lastMoveAt > MOVE_COOLDOWN_MS) {
+                        lastMoveAt = now
                         Diag.log("stream", "file=$fileId: baixar a partir de $offset (seek ou download parado)")
                         runCatching { send(TdApi.DownloadFile(fileId, STREAM_PRIORITY, offset, 0, false)) }
                     }
@@ -265,5 +273,6 @@ class TdlibTelegramGateway(context: Context) : TelegramGateway {
         const val CHAT_LIMIT = 100
         const val STREAM_PRIORITY = 32
         const val READ_TIMEOUT_MS = 30_000L
+        const val MOVE_COOLDOWN_MS = 1_000L
     }
 }

@@ -51,6 +51,9 @@ import app.lumicast.domain.CastDevice
 import app.lumicast.domain.TgVideo
 import app.lumicast.ui.components.formatDuration
 import app.lumicast.ui.components.parseClock
+import app.lumicast.ui.components.formatClockDigits
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.ui.text.input.KeyboardType
@@ -203,29 +206,32 @@ fun QueueScreen(
 /** "Começar em" / "Terminar em": vale para todos os vídeos transmitidos (ex.: pular abertura e créditos). */
 @Composable
 private fun TrimSettings(trimStart: Int, trimEnd: Int, onTrim: (Int, Int) -> Unit) {
-    var start by remember(trimStart) { mutableStateOf(if (trimStart > 0) formatDuration(trimStart) else "") }
-    var end by remember(trimEnd) { mutableStateOf(if (trimEnd > 0) formatDuration(trimEnd) else "") }
-    val startSec = if (start.isBlank()) 0 else parseClock(start)
-    val endSec = if (end.isBlank()) 0 else parseClock(end)
+    // Digita só números e o ":" aparece sozinho (o teclado numérico do celular não tem ":").
+    fun field(sec: Int) = (if (sec > 0) formatDuration(sec) else "").let { TextFieldValue(it, TextRange(it.length)) }
+    fun masked(v: TextFieldValue) = formatClockDigits(v.text).let { TextFieldValue(it, TextRange(it.length)) }
+    var start by remember(trimStart) { mutableStateOf(field(trimStart)) }
+    var end by remember(trimEnd) { mutableStateOf(field(trimEnd)) }
+    val startSec = if (start.text.isBlank()) 0 else parseClock(start.text)
+    val endSec = if (end.text.isBlank()) 0 else parseClock(end.text)
     val valid = startSec != null && endSec != null && (endSec == 0 || endSec > startSec)
     val changed = valid && (startSec != trimStart || endSec != trimEnd)
 
     Text("Começo e fim de cada vídeo", style = MaterialTheme.typography.titleMedium)
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(
-            start, { start = it }, Modifier.weight(1f), singleLine = true,
-            label = { Text("Começar em") }, placeholder = { Text("1:30") }, isError = startSec == null,
+            start, { start = masked(it) }, Modifier.weight(1f), singleLine = true,
+            label = { Text("Começar em") }, placeholder = { Text("1:30") }, supportingText = { Text("min:seg") }, isError = startSec == null,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         )
         OutlinedTextField(
-            end, { end = it }, Modifier.weight(1f), singleLine = true,
-            label = { Text("Terminar em") }, placeholder = { Text("14:50") }, isError = endSec == null || !valid,
+            end, { end = masked(it) }, Modifier.weight(1f), singleLine = true,
+            label = { Text("Terminar em") }, placeholder = { Text("14:50") }, supportingText = { Text("min:seg") }, isError = endSec == null || !valid,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         )
     }
     Text(
         when {
-            !valid -> "Use minutos:segundos (ex.: 1:30). O fim precisa ser depois do começo."
+            !valid -> "Segundos vão até 59, e o fim precisa ser depois do começo. Ex.: 130 = 1:30, 1450 = 14:50."
             trimEnd > 0 -> "Ao chegar no fim, passa para o próximo da fila. Deixe em branco para o vídeo inteiro."
             else -> "Deixe em branco para o vídeo inteiro."
         },

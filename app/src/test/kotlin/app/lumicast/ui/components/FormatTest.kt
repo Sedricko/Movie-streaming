@@ -22,4 +22,16 @@ class FormatTest {
     }
 
     @Test fun formatarEVoltarDaOMesmoValor() = assertEquals(890, parseClock(formatDuration(890)))
+
+    @Test fun mascaraDeTempoAoDigitar() {
+        assertEquals("0:05", formatClockDigits("5"))
+        assertEquals("1:30", formatClockDigits("130"))
+        assertEquals("14:50", formatClockDigits("1450"))
+        assertEquals("10:00", formatClockDigits("1000"))
+        assertEquals("1:12:59", formatClockDigits("11259"))
+        assertEquals("10:12:59", formatClockDigits("101259"))
+        assertEquals("1:30", formatClockDigits("1:30")) // já formatado continua igual
+        assertEquals("", formatClockDigits("0"))
+        assertEquals(890, parseClock(formatClockDigits("1450")))
+    }
 }
