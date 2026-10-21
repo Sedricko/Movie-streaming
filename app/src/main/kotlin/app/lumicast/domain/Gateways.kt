@@ -42,6 +42,9 @@ interface TelegramGateway {
     /** Baixa o vídeo inteiro e devolve o caminho local (cache do Telegram). */
     suspend fun download(video: TgVideo): String
 
+    /** Quanto do arquivo já está no celular, 0f..1f (para mostrar o progresso de um download). */
+    fun downloadedFraction(video: TgVideo): Float
+
     /** Apaga a cópia do cache do Telegram (depois de salvar na galeria, para não ocupar o dobro). */
     suspend fun releaseLocal(video: TgVideo)
 

@@ -27,6 +27,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.text.style.TextOverflow
 import app.lumicast.domain.NaturalTitleOrder
+import app.lumicast.domain.Transfer
 import app.lumicast.domain.VideoFolder
 import app.lumicast.ui.components.FolderActions
 import app.lumicast.ui.components.FolderPickerDialog
@@ -65,7 +66,7 @@ fun LibraryScreen(
     videos: List<TgVideo>,
     folders: List<VideoFolder>,
     openFolder: VideoFolder?,
-    downloadStatus: String?,
+    downloadStatus: Transfer?,
     folderActions: FolderActions,
     devices: List<CastDevice>,
     tv: CastDevice?,
@@ -200,13 +201,6 @@ fun LibraryScreen(
             singleLine = true,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
         )
-
-        downloadStatus?.let {
-            Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
-                TextButton(onClick = folderActions.cancelDownload) { Text("Cancelar") }
-            }
-        }
 
         if (openChat == null && openFolder == null) {
             val shownFolders = folders.filter { it.name.contains(query, ignoreCase = true) }

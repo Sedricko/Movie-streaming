@@ -17,6 +17,9 @@ import app.lumicast.domain.NaturalTitleOrder
 import app.lumicast.domain.PlayStatus
 import app.lumicast.domain.TgChat
 import app.lumicast.domain.TgVideo
+import app.lumicast.domain.Transfer
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.update
 import app.lumicast.domain.VideoFolder
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -198,8 +201,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     /** Texto do download de pasta em andamento ("Baixando 2 de 5…"), ou null. */
-    private val _downloadStatus = MutableStateFlow<String?>(null)
-    val downloadStatus: StateFlow<String?> = _downloadStatus.asStateFlow()
+    private val _downloadStatus = MutableStateFlow<Transfer?>(null)
+    val downloadStatus: StateFlow<Transfer?> = _downloadStatus.asStateFlow()
+
+    /** Roda [block] (um download do Telegram) atualizando a % a cada meio segundo. */
+    private suspend fun <T> withDownloadProgress(video: TgVideo, onFraction: (Float) -> Unit, block: suspend () -> T): T = coroutineScope {
+        val poll = launch { while (true) { onFraction(telegram.downloadedFraction(video)); delay(500) } }
+        try { block() } finally { poll.cancel() }
+    }
 
     fun showFolder(folder: VideoFolder) {
         _openChat.value = null
@@ -255,14 +264,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 videos.forEachIndexed { i, video ->
                     current = video
-                    _downloadStatus.value = "Baixando ${i + 1} de ${videos.size}: ${video.title}"
+                    _downloadStatus.value = Transfer("Baixando ${i + 1} de ${videos.size}", video.title, 0f)
                     savedSource(video)?.let {
                         it.close()
                         done++
                         return@forEachIndexed // já está na galeria: não baixar de novo
                     }
                     runCatching {
-                        val path = telegram.download(video)
+                        val path = withDownloadProgress(video, { f -> _downloadStatus.update { it?.copy(fraction = f) } }) { telegram.download(video) }
                         val uri = withContext(Dispatchers.IO) { saveToDownloads(getApplication(), File(path), name, video.title, video.mimeType) }
                         prefs.edit().putString(savedKey(video), uri).apply()
                         if (streaming?.first?.fileId != video.fileId && previewing?.first?.fileId != video.fileId) telegram.releaseLocal(video)
@@ -467,8 +476,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private var convertJob: Job? = null
 
     /** "Convertendo para MP4: 40%", ou null. Mostrado na aba TV. */
-    private val _conversion = MutableStateFlow<String?>(null)
-    val conversion: StateFlow<String?> = _conversion.asStateFlow()
+    private val _conversion = MutableStateFlow<Transfer?>(null)
+    val conversion: StateFlow<Transfer?> = _conversion.asStateFlow()
 
     fun cancelConversion() {
         convertJob?.cancel()
@@ -486,10 +495,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             else -> convertJob = viewModelScope.launch {
                 Diag.log("convert", "file=${video.fileId} (${video.mimeType}) recusado pela TV: convertendo")
                 try {
-                    _conversion.value = "Baixando “${video.title}” para converter…"
-                    val input = prefs.getString(savedKey(video), null)?.let(Uri::parse) ?: Uri.fromFile(File(telegram.download(video)))
+                    _conversion.value = Transfer("Baixando para converter", video.title, 0f)
+                    val input = prefs.getString(savedKey(video), null)?.let(Uri::parse)
+                        ?: Uri.fromFile(File(withDownloadProgress(video, { f -> _conversion.update { it?.copy(fraction = f) } }) { telegram.download(video) }))
                     val out = File(getApplication<Application>().cacheDir, "convertidos/${video.chatId}_${video.messageId}.mp4")
-                    converter.toMp4(input, out) { p -> _conversion.value = "Convertendo para MP4: $p%" }
+                    _conversion.value = Transfer("Convertendo para MP4", video.title, null)
+                    converter.toMp4(input, out) { p -> _conversion.value = Transfer("Convertendo para MP4", video.title, p / 100f) }
                     prefs.edit().putString(convertedKey(video), Uri.fromFile(out).toString()).apply()
                     Diag.log("convert", "file=${video.fileId} convertido (${out.length()} B)")
                     _conversion.value = null
