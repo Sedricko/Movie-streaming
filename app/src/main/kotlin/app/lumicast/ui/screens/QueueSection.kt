@@ -3,11 +3,8 @@ package app.lumicast.ui.screens
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DragIndicator
@@ -66,11 +63,13 @@ private val ROW_HEIGHT = 64.dp
 private val ROW_GAP = 12.dp
 private val SWITCH_OPTIONS = listOf(0 to "Ao terminar", 5 to "5 min", 10 to "10 min", 30 to "30 min")
 
+/** "A seguir" na aba TV: fila arrastável, iniciar/agendar na TV escolhida e opções recolhidas. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun QueueScreen(
+fun QueueSection(
     queue: List<TgVideo>,
-    devices: List<CastDevice>,
+    tv: CastDevice?,
+    playing: Boolean,
     scheduledAt: Long?,
     switchEveryMin: Int,
     trimStart: Int,
@@ -85,7 +84,7 @@ fun QueueScreen(
     onClearQueue: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var startAt by remember { mutableStateOf<Long?>(null) }
+    var showOptions by remember { mutableStateOf(false) }
     var dragIndex by remember { mutableStateOf<Int?>(null) }
     var dragOffset by remember { mutableFloatStateOf(0f) }
     val rowPx = with(LocalDensity.current) { (ROW_HEIGHT + ROW_GAP).toPx() } // distância entre linhas = altura + espaço da Column
@@ -93,24 +92,19 @@ fun QueueScreen(
     var picking by remember { mutableStateOf(false) }
     val hhmm = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
 
-    Column(
-        modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(ROW_GAP),
-    ) {
-        TrimSettings(trimStart, trimEnd, onTrim)
-
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(ROW_GAP)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Fila (${queue.size})", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+            Text("A seguir (${queue.size})", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
             if (queue.isNotEmpty()) {
-                TextButton(onClick = onDownloadQueue) { Text("Baixar tudo") }
+                TextButton(onClick = onDownloadQueue) { Text("Baixar") }
                 TextButton(onClick = onClearQueue) { Text("Limpar") }
             }
         }
         if (queue.isEmpty()) {
-            Text("Toque em um vídeo na Biblioteca e escolha “Adicionar à fila”.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            return@Column
+            Text("Na Biblioteca, toque num vídeo e escolha “Fila”.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            Text("Segure e arraste para mudar a ordem.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Text("Segure um vídeo e arraste para mudar a ordem.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         // Sem key(): cada linha é uma posição fixa; o gesto continua na linha onde o dedo começou
         // e o deslocamento é aplicado à posição para onde o vídeo já foi movido (dragIndex).
         queue.forEachIndexed { i, video ->
@@ -161,31 +155,30 @@ fun QueueScreen(
             }
         }
 
-        Text("Trocar para o próximo vídeo", style = MaterialTheme.typography.titleMedium)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SWITCH_OPTIONS.forEach { (min, label) ->
-                FilterChip(selected = switchEveryMin == min, onClick = { onSwitchEvery(min) }, label = { Text(label) })
+        when {
+            scheduledAt != null -> Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Começa às ${hhmm.format(Date(scheduledAt))}.", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                TextButton(onClick = onCancelSchedule) { Text("Cancelar") }
+            }
+            queue.isEmpty() -> Unit
+            tv == null -> Text("Escolha uma TV acima para começar.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            else -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Tocando agora: a fila já anda sozinha; o botão só aparece para começar do zero.
+                if (!playing) Button(onClick = { onStart(tv, null) }, modifier = Modifier.weight(1f)) { Text("Iniciar na ${tv.name}") }
+                OutlinedButton(onClick = { picking = true }) { Text("Agendar") }
             }
         }
 
-        if (scheduledAt != null) {
-            Text("A fila começa às ${hhmm.format(Date(scheduledAt))}.", style = MaterialTheme.typography.bodyLarge)
-            OutlinedButton(onClick = onCancelSchedule) { Text("Cancelar horário") }
-        } else {
-            Text("Quando começar", style = MaterialTheme.typography.titleMedium)
+        TextButton(onClick = { showOptions = !showOptions }) {
+            Text(if (showOptions) "Ocultar opções da fila" else "Opções da fila: começo/fim e troca de vídeo")
+        }
+        if (showOptions) {
+            TrimSettings(trimStart, trimEnd, onTrim)
+            Text("Trocar para o próximo vídeo", style = MaterialTheme.typography.titleMedium)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(selected = startAt == null, onClick = { startAt = null }, label = { Text("Agora") })
-                FilterChip(
-                    selected = startAt != null,
-                    onClick = { picking = true },
-                    label = { Text(startAt?.let { "Às ${hhmm.format(Date(it))}" } ?: "Escolher horário") },
-                )
-            }
-            if (devices.isEmpty()) {
-                Text("Nenhuma TV encontrada. Confira o Wi-Fi.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            devices.forEach { d ->
-                Button(onClick = { onStart(d, startAt) }, modifier = Modifier.fillMaxWidth()) { Text("Iniciar fila na ${d.name}") }
+                SWITCH_OPTIONS.forEach { (min, label) ->
+                    FilterChip(selected = switchEveryMin == min, onClick = { onSwitchEvery(min) }, label = { Text(label) })
+                }
             }
         }
     }
@@ -201,7 +194,7 @@ fun QueueScreen(
                         set(Calendar.HOUR_OF_DAY, state.hour); set(Calendar.MINUTE, state.minute); set(Calendar.SECOND, 0)
                         if (timeInMillis <= System.currentTimeMillis()) add(Calendar.DAY_OF_MONTH, 1) // horário que já passou = amanhã
                     }
-                    startAt = at.timeInMillis
+                    tv?.let { onStart(it, at.timeInMillis) }
                     picking = false
                 }) { Text("Confirmar") }
             },

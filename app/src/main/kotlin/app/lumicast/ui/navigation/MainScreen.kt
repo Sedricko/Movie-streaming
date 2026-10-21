@@ -3,8 +3,6 @@ package app.lumicast.ui.navigation
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
-import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.Tv
 import androidx.compose.material.icons.rounded.VideoLibrary
 import androidx.compose.material3.Icon
@@ -32,17 +30,14 @@ import app.lumicast.domain.PlayStatus
 import app.lumicast.ui.components.FolderActions
 import app.lumicast.ui.components.MiniPlayer
 import app.lumicast.ui.components.PreviewPlayer
-import app.lumicast.ui.screens.DevicesScreen
 import app.lumicast.ui.screens.LibraryScreen
 import app.lumicast.ui.screens.LoginScreen
-import app.lumicast.ui.screens.NowPlayingScreen
-import app.lumicast.ui.screens.QueueScreen
+import app.lumicast.ui.screens.TvScreen
 
+/** Duas abas: escolher vídeos (Biblioteca) e tudo o que acontece na TV (TV). */
 private enum class Tab(val route: String, val label: String, val icon: ImageVector) {
     Library("biblioteca", "Biblioteca", Icons.Rounded.VideoLibrary),
-    Devices("tvs", "TVs", Icons.Rounded.Tv),
-    Playing("reproduzindo", "Reproduzindo", Icons.Rounded.PlayCircle),
-    Queue("fila", "Fila", Icons.AutoMirrored.Rounded.PlaylistPlay),
+    Tv("tv", "TV", Icons.Rounded.Tv),
 }
 
 @Composable
@@ -81,8 +76,7 @@ fun MainScreen(vm: MainViewModel) {
     val folderActions = remember(vm) {
         FolderActions(
             open = vm::showFolder, create = vm::createFolder, addTo = vm::addToFolder, rename = vm::renameFolder,
-            delete = vm::deleteFolder, download = vm::downloadFolder,
-            downloadChat = vm::downloadChat, cancelDownload = vm::cancelDownload, renameVideo = vm::renameVideo,
+            delete = vm::deleteFolder, cancelDownload = vm::cancelDownload, renameVideo = vm::renameVideo,
             moveVideo = vm::moveVideo, removeVideo = vm::removeFromFolder,
         )
     }
@@ -90,6 +84,7 @@ fun MainScreen(vm: MainViewModel) {
     val switchEveryMin by vm.switchEveryMin.collectAsStateWithLifecycle()
     val trimStart by vm.trimStart.collectAsStateWithLifecycle()
     val trimEnd by vm.trimEnd.collectAsStateWithLifecycle()
+    val selectedTv by vm.selectedTv.collectAsStateWithLifecycle()
 
     previewUrl?.let { PreviewPlayer(it, onDismiss = { vm.endPreview() }) }
 
@@ -103,8 +98,8 @@ fun MainScreen(vm: MainViewModel) {
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
             Column {
-                if (playback.video != null && route != Tab.Playing.route) {
-                    MiniPlayer(playback, onOpen = { go(Tab.Playing) }, onTogglePause = vm::togglePause)
+                if (playback.video != null && route != Tab.Tv.route) {
+                    MiniPlayer(playback, onOpen = { go(Tab.Tv) }, onTogglePause = vm::togglePause)
                 }
                 NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
                     Tab.entries.forEach { tab ->
@@ -135,6 +130,10 @@ fun MainScreen(vm: MainViewModel) {
                     downloadStatus = downloadStatus,
                     folderActions = folderActions,
                     devices = devices,
+                    tv = selectedTv,
+                    onPickTv = vm::selectTv,
+                    onRescan = vm::rescan,
+                    onShareDiagnostics = vm::shareDiagnostics,
                     pinned = pinned,
                     onTogglePin = vm::togglePin,
                     loadThumbnail = vm::thumbnail,
@@ -146,7 +145,7 @@ fun MainScreen(vm: MainViewModel) {
                     onBack = vm::closeChat,
                     onLogout = vm::logout,
                     onCast = vm::castTo,
-                    onGoToPlaying = { go(Tab.Playing) },
+                    onGoToPlaying = { go(Tab.Tv) },
                     castActive = playback.video != null,
                     castConnecting = playback.status in listOf(PlayStatus.Connecting, PlayStatus.Buffering, PlayStatus.Reconnecting),
                     castStatus = playback.device?.takeIf { playback.video != null }?.let { tv ->
@@ -156,22 +155,23 @@ fun MainScreen(vm: MainViewModel) {
                             PlayStatus.Idle, PlayStatus.Ended -> null
                             else -> "● Conectado à ${tv.name}"
                         }
-                    },
-                    onBeam = { go(if (playback.video != null) Tab.Playing else Tab.Devices) },
+                    } ?: selectedTv?.let { "TV: ${it.name}" },
+                    onBeam = { go(Tab.Tv) },
                 )
             }
-            composable(Tab.Devices.route) {
-                DevicesScreen(
+            composable(Tab.Tv.route) {
+                TvScreen(
+                    playback = playback,
+                    tv = selectedTv,
                     devices = devices,
-                    activeDeviceId = playback.device?.id,
+                    onPickTv = vm::selectTv,
                     onRescan = vm::rescan,
-                    onShareDiagnostics = vm::shareDiagnostics,
-                )
-            }
-            composable(Tab.Queue.route) {
-                QueueScreen(
+                    onTogglePause = vm::togglePause,
+                    onSeek = vm::seekTo,
+                    onStop = vm::stop,
+                    onPrevious = vm::previous,
+                    onNext = vm::next,
                     queue = queue,
-                    devices = devices,
                     scheduledAt = scheduledAt,
                     switchEveryMin = switchEveryMin,
                     trimStart = trimStart,
@@ -180,21 +180,10 @@ fun MainScreen(vm: MainViewModel) {
                     onMove = vm::moveInQueue,
                     onRemove = vm::removeFromQueue,
                     onSwitchEvery = vm::setSwitchEvery,
-                    onStart = { d, at -> vm.startQueue(d, at); if (at == null) go(Tab.Playing) },
+                    onStartQueue = vm::startQueue,
                     onCancelSchedule = vm::cancelSchedule,
                     onDownloadQueue = vm::downloadQueue,
                     onClearQueue = vm::clearQueue,
-                )
-            }
-            composable(Tab.Playing.route) {
-                NowPlayingScreen(
-                    state = playback,
-                    onTogglePause = vm::togglePause,
-                    onSeek = vm::seekTo,
-                    onStop = vm::stop,
-                    onPrevious = vm::previous,
-                    onNext = vm::next,
-                    hasNext = queue.isNotEmpty(),
                 )
             }
         }

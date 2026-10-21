@@ -1,12 +1,9 @@
 package app.lumicast.ui.screens
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -30,17 +27,16 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.lumicast.domain.PlayStatus
 import app.lumicast.domain.PlaybackState
 import app.lumicast.ui.components.BeamLine
-import app.lumicast.ui.components.EmptyState
 import app.lumicast.ui.components.formatDuration
-import app.lumicast.ui.theme.LumiShapes
 
+/** O que está na TV agora, com os controles. Fica no topo da aba TV. */
 @Composable
-fun NowPlayingScreen(
+fun NowPlayingSection(
     state: PlaybackState,
     onTogglePause: () -> Unit,
     onSeek: (Int) -> Unit,
@@ -52,11 +48,7 @@ fun NowPlayingScreen(
 ) {
     val video = state.video
     if (video == null) {
-        EmptyState(
-            title = "Nada sendo transmitido",
-            message = "Escolha um vídeo na Biblioteca e uma TV para começar.",
-            modifier = modifier,
-        )
+        Text("Nada tocando. Na Biblioteca, toque num vídeo para transmitir.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = modifier)
         return
     }
 
@@ -70,20 +62,8 @@ fun NowPlayingScreen(
         PlayStatus.Reconnecting -> "Conexão instável. Reconectando à ${state.device?.name}…"
     }
 
-    Column(
-        modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp),
-    ) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .aspectRatio(16f / 9f)
-                .clip(LumiShapes.Card)
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(video.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp))
-        }
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Text(video.title, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
 
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Icon(Icons.Rounded.Smartphone, contentDescription = "Celular", tint = MaterialTheme.colorScheme.onSurfaceVariant)

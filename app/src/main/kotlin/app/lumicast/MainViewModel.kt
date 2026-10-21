@@ -47,6 +47,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         .stateIn(viewModelScope, SharingStarted.Eagerly, cast.playback.value)
 
     private val prefs = app.getSharedPreferences("lumicast", 0)
+
+    /** A TV escolhida (lembrada entre aberturas). Com uma TV só na rede, ela já vem escolhida. */
+    private val _selectedTvId = MutableStateFlow(prefs.getString("tv", null))
+    val selectedTv: StateFlow<CastDevice?> = combine(devices, _selectedTvId) { ds, id -> ds.firstOrNull { it.id == id } ?: ds.singleOrNull() }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    fun selectTv(device: CastDevice) {
+        _selectedTvId.value = device.id
+        prefs.edit().putString("tv", device.id).apply()
+    }
     private val _pinned = MutableStateFlow(prefs.getStringSet("pinned", emptySet())!!.mapNotNull { it.toLongOrNull() }.toSet())
     val pinned: StateFlow<Set<Long>> = _pinned.asStateFlow()
 
@@ -161,16 +171,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private var downloadJob: Job? = null
-
-    /** Baixa todos os vídeos da pasta para Downloads/Lumicast/<pasta>. */
-    fun downloadFolder(folderId: String) {
-        folders.value.firstOrNull { it.id == folderId }?.let { downloadAll(it.name, it.videos) }
-    }
-
-    /** Baixa todos os vídeos do chat aberto para Downloads/Lumicast/<chat>. */
-    fun downloadChat() {
-        _openChat.value?.let { downloadAll(it.title, _videos.value) }
-    }
 
     fun cancelDownload() {
         downloadJob?.cancel()
@@ -405,6 +405,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         // +0,5 s porque os gateways truncam: 90 s não pode virar 89.
         val video = if (start in 1 until original.durationSec) original.copy(resumeFraction = (start + 0.5f) / original.durationSec) else original
         queueDevice = device
+        if (_selectedTvId.value != device.id) selectTv(device)
         switchJob?.cancel()
         val every = _switchEveryMin.value
         if (every > 0 && _queue.value.isNotEmpty()) {
