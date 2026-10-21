@@ -62,14 +62,36 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private val _settings = MutableStateFlow(
-        AppSettings(resume = prefs.getBoolean("set.resume", true), autoNext = prefs.getBoolean("set.autoNext", true)),
+        AppSettings(
+            resume = prefs.getBoolean("set.resume", true),
+            autoNext = prefs.getBoolean("set.autoNext", true),
+            dlna = prefs.getBoolean("set.dlna", true),
+            volumeKeys = prefs.getBoolean("set.volumeKeys", true),
+        ),
     )
     val settings: StateFlow<AppSettings> = _settings.asStateFlow()
 
     fun updateSettings(new: AppSettings) {
+        val dlnaChanged = new.dlna != _settings.value.dlna
         _settings.value = new
-        prefs.edit().putBoolean("set.resume", new.resume).putBoolean("set.autoNext", new.autoNext).apply()
+        prefs.edit()
+            .putBoolean("set.resume", new.resume).putBoolean("set.autoNext", new.autoNext)
+            .putBoolean("set.dlna", new.dlna).putBoolean("set.volumeKeys", new.volumeKeys)
+            .commit() // commit: o MultiCastGateway lê "set.dlna" logo em seguida
+        if (dlnaChanged) cast.startDiscovery()
     }
+
+    fun setVolume(level: Float) = viewModelScope.launch { runCatching { cast.setVolume(level) }.onFailure(::toast) }
+
+    /** Teclas de volume do celular → volume da TV. false = não está transmitindo (o celular trata a tecla). */
+    fun nudgeVolume(up: Boolean): Boolean {
+        val p = playback.value
+        if (!_settings.value.volumeKeys || p.video == null) return false
+        setVolume(((p.volume ?: 0.5f) + if (up) 0.05f else -0.05f).coerceIn(0f, 1f))
+        return true
+    }
+
+    fun setSpeed(rate: Float) = viewModelScope.launch { runCatching { cast.setSpeed(rate) }.onFailure(::toast) }
 
     /** Quanto de cada vídeo já foi assistido (0..1), por chat:mensagem. Mostrado nas miniaturas e usado para continuar. */
     private val progressPrefs = app.getSharedPreferences("progress", 0)

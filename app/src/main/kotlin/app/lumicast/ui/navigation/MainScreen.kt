@@ -179,6 +179,8 @@ fun MainScreen(vm: MainViewModel) {
                     onPrevious = vm::previous,
                     onNext = vm::next,
                     canSkipNext = queue.isNotEmpty() || settings.autoNext,
+                    onVolume = vm::setVolume,
+                    onSpeed = vm::setSpeed,
                     queue = queue,
                     scheduledAt = scheduledAt,
                     switchEveryMin = switchEveryMin,

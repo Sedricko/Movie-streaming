@@ -45,6 +45,8 @@ fun TvScreen(
     onNext: () -> Unit,
     /** Há fila ou "próximo episódio automático" ligado. */
     canSkipNext: Boolean,
+    onVolume: (Float) -> Unit,
+    onSpeed: (Float) -> Unit,
     queue: List<TgVideo>,
     scheduledAt: Long?,
     switchEveryMin: Int,
@@ -84,6 +86,8 @@ fun TvScreen(
             onPrevious = onPrevious,
             onNext = onNext,
             hasNext = canSkipNext,
+            onVolume = onVolume,
+            onSpeed = onSpeed,
         )
 
         HorizontalDivider()

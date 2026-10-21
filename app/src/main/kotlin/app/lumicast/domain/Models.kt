@@ -55,6 +55,9 @@ data class PlaybackState(
     val positionSec: Int = 0,
     /** Parte do arquivo já baixada do Telegram, 0f..1f. */
     val downloadedFraction: Float = 0f,
+    /** Volume da TV 0f..1f, ou null se ainda não sabemos. */
+    val volume: Float? = null,
+    val speed: Float = 1f,
 )
 
 /** Pasta do Lumicast (só no aparelho; não mexe no Telegram). Os vídeos guardam o título que o usuário deu. */
@@ -73,4 +76,8 @@ data class AppSettings(
     val resume: Boolean = true,
     /** Sem fila, ao terminar um vídeo tocar o próximo do mesmo chat/pasta (ordem 1→9). */
     val autoNext: Boolean = true,
+    /** Procurar também TVs DLNA (Samsung, LG, Sony…) além de Chromecast/Google TV. */
+    val dlna: Boolean = true,
+    /** Com o app aberto e transmitindo, as teclas de volume do celular mudam o volume da TV. */
+    val volumeKeys: Boolean = true,
 )

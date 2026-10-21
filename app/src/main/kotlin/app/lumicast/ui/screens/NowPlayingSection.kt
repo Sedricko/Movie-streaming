@@ -30,6 +30,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.lumicast.domain.PlayStatus
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.material.icons.automirrored.rounded.VolumeDown
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import app.lumicast.domain.PlaybackState
 import app.lumicast.ui.components.BeamLine
 import app.lumicast.ui.components.formatDuration
@@ -44,6 +56,8 @@ fun NowPlayingSection(
     onPrevious: () -> Unit,
     onNext: () -> Unit,
     hasNext: Boolean,
+    onVolume: (Float) -> Unit,
+    onSpeed: (Float) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val video = state.video
@@ -120,5 +134,33 @@ fun NowPlayingSection(
                 Icon(Icons.Rounded.Stop, contentDescription = "Parar transmissão")
             }
         }
+
+        // Volume (quando a TV informa) e velocidade.
+        var speedMenu by remember { mutableStateOf(false) }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            state.volume?.let { vol ->
+                Icon(Icons.AutoMirrored.Rounded.VolumeDown, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                var dragging by remember(vol) { mutableStateOf(vol) }
+                Slider(
+                    value = dragging,
+                    onValueChange = { dragging = it },
+                    onValueChangeFinished = { onVolume(dragging) }, // um comando ao soltar, não um por pixel (DLNA engasga)
+                    modifier = Modifier.weight(1f).semantics { contentDescription = "Volume da TV" },
+                )
+                Icon(Icons.AutoMirrored.Rounded.VolumeUp, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            } ?: Spacer(Modifier.weight(1f))
+            Box {
+                TextButton(onClick = { speedMenu = true }) { Text("${formatSpeed(state.speed)}×") }
+                DropdownMenu(expanded = speedMenu, onDismissRequest = { speedMenu = false }) {
+                    SPEEDS.forEach { r ->
+                        DropdownMenuItem(text = { Text("${formatSpeed(r)}×") }, onClick = { speedMenu = false; onSpeed(r) })
+                    }
+                }
+            }
+        }
     }
 }
+
+private val SPEEDS = listOf(0.75f, 1f, 1.25f, 1.5f, 2f)
+
+private fun formatSpeed(r: Float) = if (r % 1f == 0f) r.toInt().toString() else r.toString().replace('.', ',')

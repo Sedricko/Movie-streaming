@@ -35,6 +35,16 @@ fun SettingsSheet(settings: AppSettings, onChange: (AppSettings) -> Unit, onDism
                 "Sem fila, ao terminar um vídeo toca o próximo do mesmo chat ou pasta, em ordem 1→9.",
                 settings.autoNext,
             ) { onChange(settings.copy(autoNext = it)) }
+            SettingSwitch(
+                "Procurar TVs DLNA",
+                "Além de Chromecast e Google TV, mostra Smart TVs Samsung, LG, Sony e outras que aceitam DLNA.",
+                settings.dlna,
+            ) { onChange(settings.copy(dlna = it)) }
+            SettingSwitch(
+                "Teclas de volume controlam a TV",
+                "Com o app aberto e transmitindo, as teclas de volume do celular mudam o volume da TV.",
+                settings.volumeKeys,
+            ) { onChange(settings.copy(volumeKeys = it)) }
         }
     }
 }

@@ -57,5 +57,11 @@ interface CastGateway {
     suspend fun play(device: CastDevice, video: TgVideo, streamUrl: String)
     suspend fun togglePause()
     suspend fun seekTo(seconds: Int)
+
+    /** Volume da TV, 0f..1f. Pode lançar UnsupportedOperationException se a TV não deixar. */
+    suspend fun setVolume(level: Float)
+
+    /** Velocidade (1f = normal). Pode lançar UnsupportedOperationException se a TV não deixar. */
+    suspend fun setSpeed(rate: Float)
     suspend fun stop()
 }

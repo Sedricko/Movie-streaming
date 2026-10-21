@@ -211,6 +211,7 @@ class GoogleCastGateway(context: Context) : CastGateway {
             .setMetadata(MediaMetadata(MediaMetadata.MEDIA_TYPE_MOVIE).apply { putString(MediaMetadata.KEY_TITLE, video.title) })
             .build()
         client.load(MediaLoadRequestData.Builder().setMediaInfo(info).setAutoplay(true).setCurrentTime(start * 1000).build())
+        _playback.update { it.copy(volume = session.volume.toFloat()) }
         casting = Triple(device, video, streamUrl)
     }
 
@@ -255,6 +256,17 @@ class GoogleCastGateway(context: Context) : CastGateway {
     override suspend fun seekTo(seconds: Int) = withContext(Dispatchers.Main) {
         client()?.seek(MediaSeekOptions.Builder().setPosition(seconds.coerceAtLeast(0) * 1000L).build())
         Unit
+    }
+
+    override suspend fun setVolume(level: Float) = withContext(Dispatchers.Main) {
+        val v = level.coerceIn(0f, 1f)
+        castContext.sessionManager.currentCastSession?.volume = v.toDouble()
+        _playback.update { it.copy(volume = v) }
+    }
+
+    override suspend fun setSpeed(rate: Float) = withContext(Dispatchers.Main) {
+        client()?.setPlaybackRate(rate.toDouble())
+        _playback.update { it.copy(speed = rate) }
     }
 
     override suspend fun stop() = withContext(Dispatchers.Main) {
