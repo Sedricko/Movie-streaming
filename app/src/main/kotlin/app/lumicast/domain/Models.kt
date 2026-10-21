@@ -85,7 +85,12 @@ data class AppSettings(
     /** Ao escolher a TV (e quando a fila acaba), mostrar nela a tela "Lumicast conectado". */
     val showSplash: Boolean = true,
     val theme: ThemeMode = ThemeMode.System,
+    /** Tamanho máximo do cache do Telegram em GB (0 = sem limite). O excesso é apagado ao parar de transmitir. */
+    val cacheLimitGb: Int = 0,
 )
+
+/** Espaço usado pelo app (não conta os vídeos salvos na galeria, que são seus). */
+data class StorageInfo(val telegramBytes: Long, val convertedBytes: Long)
 
 enum class ThemeMode { System, Light, Dark }
 

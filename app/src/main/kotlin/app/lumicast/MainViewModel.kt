@@ -11,6 +11,7 @@ import android.net.Uri
 import app.lumicast.data.library.saveToDownloads
 import app.lumicast.data.cast.renderConnectedSplash
 import app.lumicast.data.stream.BytesSource
+import app.lumicast.domain.StorageInfo
 import app.lumicast.domain.ThemeMode
 import app.lumicast.data.stream.RangeStreamServer
 import app.lumicast.data.stream.findLanIPv4
@@ -101,6 +102,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             volumeKeys = prefs.getBoolean("set.volumeKeys", true),
             autoConvert = prefs.getBoolean("set.autoConvert", true),
             showSplash = prefs.getBoolean("set.showSplash", true),
+            cacheLimitGb = prefs.getInt("set.cacheLimitGb", 0),
             theme = runCatching { ThemeMode.valueOf(prefs.getString("set.theme", null)!!) }.getOrDefault(ThemeMode.System),
         ),
     )
@@ -114,6 +116,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             .putBoolean("set.dlna", new.dlna).putBoolean("set.volumeKeys", new.volumeKeys)
             .putBoolean("set.autoConvert", new.autoConvert)
             .putBoolean("set.showSplash", new.showSplash).putString("set.theme", new.theme.name)
+            .putInt("set.cacheLimitGb", new.cacheLimitGb)
             .commit() // commit: o MultiCastGateway lê "set.dlna" logo em seguida
         if (dlnaChanged) cast.startDiscovery()
     }
@@ -232,7 +235,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     /** Texto do download de pasta em andamento ("Baixando 2 de 5…"), ou null. */
-    private val _downloadStatus = MutableStateFlow<Transfer?>(null)
+    private val _downloadStatus = container.transfers.download
     val downloadStatus: StateFlow<Transfer?> = _downloadStatus.asStateFlow()
 
     /** Roda [block] (um download do Telegram) atualizando a % a cada meio segundo. */
@@ -277,7 +280,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         addToFolder(toId, listOf(video))
     }
 
-    private var downloadJob: Job? = null
+    private var downloadJob: Job?
+        get() = container.transfers.downloadJob
+        set(v) { container.transfers.downloadJob = v }
 
     fun cancelDownload() {
         downloadJob?.cancel()
@@ -289,13 +294,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val videos = list.distinctBy { it.fileId } // o mesmo arquivo pode estar em duas mensagens
         if (videos.isEmpty()) return
         // shortcut: o download vive no ViewModel; se o Android matar o app no meio, refaça (WorkManager resolveria).
-        downloadJob = viewModelScope.launch {
+        downloadJob = container.transfers.scope.launch { // sobrevive a fechar a tela
             var done = 0
             var current: TgVideo? = null
             try {
                 videos.forEachIndexed { i, video ->
                     current = video
                     _downloadStatus.value = Transfer("Baixando ${i + 1} de ${videos.size}", video.title, 0f)
+                    if (i == 0) TransferService.start(getApplication())
                     savedSource(video)?.let {
                         it.close()
                         done++
@@ -505,10 +511,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private val converter = VideoConverter(app)
-    private var convertJob: Job? = null
+    private var convertJob: Job?
+        get() = container.transfers.convertJob
+        set(v) { container.transfers.convertJob = v }
 
     /** "Convertendo para MP4: 40%", ou null. Mostrado na aba TV. */
-    private val _conversion = MutableStateFlow<Transfer?>(null)
+    private val _conversion = container.transfers.conversion
     val conversion: StateFlow<Transfer?> = _conversion.asStateFlow()
 
     fun cancelConversion() {
@@ -524,10 +532,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             convertedSource(video)?.also { it.close() } != null ->
                 Toast.makeText(getApplication(), "$msg Nem a versão convertida tocou nesta TV.", Toast.LENGTH_LONG).show()
             convertJob?.isActive == true -> Unit
-            else -> convertJob = viewModelScope.launch {
+            else -> convertJob = container.transfers.scope.launch { // sobrevive a fechar a tela
                 Diag.log("convert", "file=${video.fileId} (${video.mimeType}) recusado pela TV: convertendo")
                 try {
                     _conversion.value = Transfer("Baixando para converter", video.title, 0f)
+                    TransferService.start(getApplication())
                     val input = prefs.getString(savedKey(video), null)?.let(Uri::parse)
                         ?: Uri.fromFile(File(withDownloadProgress(video, { f -> _conversion.update { it?.copy(fraction = f) } }) { telegram.download(video) }))
                     val out = File(getApplication<Application>().cacheDir, "convertidos/${video.chatId}_${video.messageId}.mp4")
@@ -659,6 +668,46 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         streamSource?.close()
         streamSource = null
         streaming = null
+        applyCacheLimit()
+    }
+
+    private val _storage = MutableStateFlow<StorageInfo?>(null)
+    val storage: StateFlow<StorageInfo?> = _storage.asStateFlow()
+
+    private val convertedDir get() = File(getApplication<Application>().cacheDir, "convertidos")
+
+    /** Nada usando o cache agora? (limpar no meio de uma transmissão ou download quebraria o vídeo) */
+    private fun cacheIdle() = streaming == null && previewing == null && downloadJob?.isActive != true && convertJob?.isActive != true
+
+    fun refreshStorage() = viewModelScope.launch {
+        val converted = withContext(Dispatchers.IO) { convertedDir.walkTopDown().filter { it.isFile }.sumOf { it.length() } }
+        _storage.value = StorageInfo(runCatching { telegram.cacheBytes() }.getOrDefault(0), converted)
+    }
+
+    fun clearTelegramCache() = viewModelScope.launch {
+        if (!cacheIdle()) {
+            Toast.makeText(getApplication(), "Pare a transmissão e os downloads antes de limpar.", Toast.LENGTH_LONG).show()
+            return@launch
+        }
+        runCatching { telegram.trimCache(0) }.onFailure(::toast)
+        refreshStorage()
+    }
+
+    fun clearConverted() = viewModelScope.launch {
+        if (convertJob?.isActive == true || streamSource is SavedVideoSource) {
+            Toast.makeText(getApplication(), "Pare a transmissão e a conversão antes de apagar.", Toast.LENGTH_LONG).show()
+            return@launch
+        }
+        withContext(Dispatchers.IO) { convertedDir.deleteRecursively() }
+        prefs.edit().apply { prefs.all.keys.filter { it.startsWith("conv:") }.forEach(::remove) }.apply()
+        refreshStorage()
+    }
+
+    /** "Limite do cache" das Configurações: apaga o excesso (os mais antigos primeiro) quando nada está usando. */
+    private suspend fun applyCacheLimit() {
+        val gb = _settings.value.cacheLimitGb
+        if (gb <= 0 || !cacheIdle()) return
+        runCatching { telegram.trimCache(gb * 1024L * 1024 * 1024) }.onFailure { Diag.log("storage", "limite falhou: ${it.message}") }
     }
 
     fun togglePause() = viewModelScope.launch { cast.togglePause() }

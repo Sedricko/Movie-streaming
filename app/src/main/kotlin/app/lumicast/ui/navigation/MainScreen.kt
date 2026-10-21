@@ -92,7 +92,18 @@ fun MainScreen(vm: MainViewModel) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val conversion by vm.conversion.collectAsStateWithLifecycle()
     var showSettings by remember { mutableStateOf(false) }
-    if (showSettings) SettingsSheet(settings, onChange = vm::updateSettings, onDismiss = { showSettings = false })
+    val storage by vm.storage.collectAsStateWithLifecycle()
+    if (showSettings) {
+        LaunchedEffect(Unit) { vm.refreshStorage() }
+        SettingsSheet(
+            settings,
+            onChange = vm::updateSettings,
+            storage = storage,
+            onClearTelegram = vm::clearTelegramCache,
+            onClearConverted = vm::clearConverted,
+            onDismiss = { showSettings = false },
+        )
+    }
 
     previewUrl?.let { PreviewPlayer(it, onDismiss = { vm.endPreview() }) }
 
