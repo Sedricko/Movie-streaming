@@ -79,7 +79,8 @@ fun MainScreen(vm: MainViewModel) {
     val folderActions = remember(vm) {
         FolderActions(
             open = vm::showFolder, create = vm::createFolder, addTo = vm::addToFolder, rename = vm::renameFolder,
-            delete = vm::deleteFolder, download = { vm.downloadFolder(it) }, renameVideo = vm::renameVideo,
+            delete = vm::deleteFolder, download = vm::downloadFolder,
+            downloadChat = vm::downloadChat, cancelDownload = vm::cancelDownload, renameVideo = vm::renameVideo,
             moveVideo = vm::moveVideo, removeVideo = vm::removeFromFolder,
         )
     }
