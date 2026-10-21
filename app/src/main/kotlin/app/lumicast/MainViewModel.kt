@@ -10,6 +10,7 @@ import app.lumicast.data.library.saveToDownloads
 import app.lumicast.data.stream.RangeStreamServer
 import app.lumicast.data.stream.findLanIPv4
 import app.lumicast.domain.CastDevice
+import app.lumicast.domain.NaturalTitleOrder
 import app.lumicast.domain.PlayStatus
 import app.lumicast.domain.TgChat
 import app.lumicast.domain.TgVideo
@@ -224,6 +225,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _queue.value += videos
         val what = if (videos.size == 1) "Adicionado" else "${videos.size} vídeos adicionados"
         Toast.makeText(getApplication(), "$what à fila (${_queue.value.size} no total).", Toast.LENGTH_SHORT).show()
+    }
+
+    /** Põe a fila em sequência pelo nome (vídeo 1, 2, 3…); [descending] inverte. */
+    fun sortQueue(descending: Boolean) {
+        _queue.value = _queue.value.sortedWith(if (descending) NaturalTitleOrder.reversed() else NaturalTitleOrder)
     }
 
     fun clearQueue() {

@@ -184,6 +184,7 @@ fun MainScreen(vm: MainViewModel) {
                     onCancelSchedule = vm::cancelSchedule,
                     onDownloadQueue = vm::downloadQueue,
                     onClearQueue = vm::clearQueue,
+                    onSortQueue = vm::sortQueue,
                 )
             }
         }

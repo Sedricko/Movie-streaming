@@ -56,6 +56,7 @@ fun TvScreen(
     onCancelSchedule: () -> Unit,
     onDownloadQueue: () -> Unit,
     onClearQueue: () -> Unit,
+    onSortQueue: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var picking by remember { mutableStateOf(false) }
@@ -101,6 +102,7 @@ fun TvScreen(
             onCancelSchedule = onCancelSchedule,
             onDownloadQueue = onDownloadQueue,
             onClearQueue = onClearQueue,
+            onSort = onSortQueue,
         )
     }
 

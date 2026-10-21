@@ -26,6 +26,7 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.text.style.TextOverflow
+import app.lumicast.domain.NaturalTitleOrder
 import app.lumicast.domain.VideoFolder
 import app.lumicast.ui.components.FolderActions
 import app.lumicast.ui.components.FolderPickerDialog
@@ -100,7 +101,15 @@ fun LibraryScreen(
     var selected by remember(openChat?.id, openFolder?.id) { mutableStateOf(setOf<String>()) }
     fun keyOf(v: TgVideo) = "${v.chatId}:${v.messageId}"
     fun toggle(v: TgVideo) { selected = if (keyOf(v) in selected) selected - keyOf(v) else selected + keyOf(v) }
-    val listVideos = openFolder?.videos ?: videos
+    var order by remember { mutableStateOf(VideoOrder.Recent) }
+    // Mesma ordem para a lista e para "selecionar todos": ordenar e mandar para a fila já sai em sequência.
+    val listVideos = (openFolder?.videos ?: videos).let { list ->
+        when (order) {
+            VideoOrder.Recent -> list
+            VideoOrder.Ascending -> list.sortedWith(NaturalTitleOrder)
+            VideoOrder.Descending -> list.sortedWith(NaturalTitleOrder.reversed())
+        }
+    }
     val selectedVideos = listVideos.filter { keyOf(it) in selected }
     var moving by remember { mutableStateOf<TgVideo?>(null) }
     var renamingVideo by remember { mutableStateOf<TgVideo?>(null) }
@@ -223,14 +232,17 @@ fun LibraryScreen(
                 items(shown, key = { it.id }) { ChatRow(it, pinned = it.id in pinned, onClick = { onOpenChat(it) }, onTogglePin = { onTogglePin(it) }) }
             }
         } else {
-            val shown = (openFolder?.videos ?: videos).filter { it.title.contains(query, ignoreCase = true) }
+            val shown = listVideos.filter { it.title.contains(query, ignoreCase = true) }
             if (shown.isNotEmpty() && selected.isEmpty()) {
-                Text(
-                    "Segure um vídeo para selecionar vários (baixar, fila, pasta).",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 20.dp),
-                )
+                Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Segure um vídeo para selecionar vários.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = { order = order.next() }) { Text("Ordem: ${order.label}") }
+                }
             }
             if (shown.isEmpty()) {
                 EmptyState(
@@ -336,4 +348,11 @@ private fun OverflowMenu(open: Boolean, onOpen: (Boolean) -> Unit, description: 
         IconButton(onClick = { onOpen(true) }) { Icon(Icons.Rounded.MoreVert, description) }
         DropdownMenu(expanded = open, onDismissRequest = { onOpen(false) }) { items() }
     }
+}
+
+/** Ordem da lista de vídeos: como vem do Telegram ou em sequência pelo nome (vídeo 1, 2, 3…). */
+private enum class VideoOrder(val label: String) {
+    Recent("recentes"), Ascending("1→9"), Descending("9→1");
+
+    fun next() = entries[(ordinal + 1) % entries.size]
 }
