@@ -1,5 +1,6 @@
 package app.lumicast.data.stream
 
+import app.lumicast.Diag
 import app.lumicast.domain.StreamSource
 import io.ktor.http.ContentType
 import io.ktor.http.Headers
@@ -78,6 +79,7 @@ class RangeStreamServer(
             return
         }
         val size = source.sizeBytes
+        Diag.log("server", "${if (headOnly) "HEAD" else "GET"} range=${call.request.headers[HttpHeaders.Range]} de ${call.request.local.remoteAddress}")
         call.response.header(HttpHeaders.AcceptRanges, "bytes")
         call.response.header(HttpHeaders.AccessControlAllowOrigin, "*")
         call.response.header("transferMode.dlna.org", "Streaming")

@@ -19,4 +19,9 @@ class AppContainer(context: Context) {
 
 class LumicastApp : Application() {
     val container: AppContainer by lazy { AppContainer(this) }
+
+    override fun onCreate() {
+        super.onCreate()
+        Diag.install(this)
+    }
 }

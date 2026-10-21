@@ -3,6 +3,7 @@ package app.lumicast.ui.navigation
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
 import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.Tv
 import androidx.compose.material.icons.rounded.VideoLibrary
@@ -32,11 +33,13 @@ import app.lumicast.ui.screens.DevicesScreen
 import app.lumicast.ui.screens.LibraryScreen
 import app.lumicast.ui.screens.LoginScreen
 import app.lumicast.ui.screens.NowPlayingScreen
+import app.lumicast.ui.screens.QueueScreen
 
 private enum class Tab(val route: String, val label: String, val icon: ImageVector) {
     Library("biblioteca", "Biblioteca", Icons.Rounded.VideoLibrary),
     Devices("tvs", "TVs", Icons.Rounded.Tv),
     Playing("reproduzindo", "Reproduzindo", Icons.Rounded.PlayCircle),
+    Queue("fila", "Fila", Icons.AutoMirrored.Rounded.PlaylistPlay),
 }
 
 @Composable
@@ -67,6 +70,9 @@ fun MainScreen(vm: MainViewModel) {
     val playback by vm.playback.collectAsStateWithLifecycle()
     val pinned by vm.pinned.collectAsStateWithLifecycle()
     val previewUrl by vm.previewUrl.collectAsStateWithLifecycle()
+    val queue by vm.queue.collectAsStateWithLifecycle()
+    val scheduledAt by vm.scheduledAt.collectAsStateWithLifecycle()
+    val switchEveryMin by vm.switchEveryMin.collectAsStateWithLifecycle()
 
     previewUrl?.let { PreviewPlayer(it, onDismiss = { vm.endPreview() }) }
 
@@ -112,6 +118,7 @@ fun MainScreen(vm: MainViewModel) {
                     onTogglePin = vm::togglePin,
                     loadThumbnail = vm::thumbnail,
                     onPreview = vm::preview,
+                    onEnqueue = vm::enqueue,
                     onOpenChat = vm::open,
                     onBack = vm::closeChat,
                     onLogout = vm::logout,
@@ -122,7 +129,25 @@ fun MainScreen(vm: MainViewModel) {
                 )
             }
             composable(Tab.Devices.route) {
-                DevicesScreen(devices = devices, activeDeviceId = playback.device?.id, onRescan = vm::rescan)
+                DevicesScreen(
+                    devices = devices,
+                    activeDeviceId = playback.device?.id,
+                    onRescan = vm::rescan,
+                    onShareDiagnostics = vm::shareDiagnostics,
+                )
+            }
+            composable(Tab.Queue.route) {
+                QueueScreen(
+                    queue = queue,
+                    devices = devices,
+                    scheduledAt = scheduledAt,
+                    switchEveryMin = switchEveryMin,
+                    onMove = vm::moveInQueue,
+                    onRemove = vm::removeFromQueue,
+                    onSwitchEvery = vm::setSwitchEvery,
+                    onStart = { d, at -> vm.startQueue(d, at); if (at == null) go(Tab.Playing) },
+                    onCancelSchedule = vm::cancelSchedule,
+                )
             }
             composable(Tab.Playing.route) {
                 NowPlayingScreen(

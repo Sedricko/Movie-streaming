@@ -3,6 +3,7 @@ package app.lumicast.data.telegram
 import android.content.Context
 import android.os.Build
 import app.lumicast.BuildConfig
+import app.lumicast.Diag
 import app.lumicast.domain.AuthState
 import app.lumicast.domain.ChatKind
 import app.lumicast.domain.StreamSource
@@ -223,12 +224,13 @@ class TdlibTelegramGateway(context: Context) : TelegramGateway {
                         }
                     }
                     if (!downloadReaches(offset)) {
+                        Diag.log("stream", "file=$fileId: baixar a partir de $offset (seek ou download parado)")
                         runCatching { send(TdApi.DownloadFile(fileId, STREAM_PRIORITY, offset, 0, false)) }
                     }
                     withTimeoutOrNull(500) { fileUpdates.first { it == fileId } }
                 }
                 @Suppress("UNREACHABLE_CODE") -1
-            } ?: -1
+            } ?: (-1).also { Diag.log("stream", "file=$fileId: tempo esgotado esperando bytes em $offset") }
         }
 
         private suspend fun prefixAt(offset: Long): Long =
@@ -238,6 +240,7 @@ class TdlibTelegramGateway(context: Context) : TelegramGateway {
 
     private fun friendly(t: Throwable): String {
         val msg = (t as? TdException)?.error?.message ?: t.message.orEmpty()
+        Diag.log("telegram", "erro: $msg")
         val wait = Regex("""(?:FLOOD_WAIT_|retry after )(\d+)""").find(msg)?.groupValues?.get(1)
         return when {
             wait != null -> "Muitas tentativas. Aguarde $wait segundos e tente de novo."

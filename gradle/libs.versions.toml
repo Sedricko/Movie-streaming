@@ -12,6 +12,7 @@ junit = "4.13.2"
 castFramework = "22.1.0"
 mediarouter = "1.8.1"
 media3 = "1.8.0"
+playServicesAuth = "21.3.0"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
@@ -33,6 +34,7 @@ cast-framework = { module = "com.google.android.gms:play-services-cast-framework
 androidx-mediarouter = { module = "androidx.mediarouter:mediarouter", version.ref = "mediarouter" }
 media3-exoplayer = { module = "androidx.media3:media3-exoplayer", version.ref = "media3" }
 media3-ui = { module = "androidx.media3:media3-ui", version.ref = "media3" }
+play-services-auth = { module = "com.google.android.gms:play-services-auth", version.ref = "playServicesAuth" }
 junit = { module = "junit:junit", version.ref = "junit" }
 
 [plugins]

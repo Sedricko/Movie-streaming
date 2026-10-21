@@ -3,6 +3,7 @@ package app.lumicast.data.cast
 import android.content.Context
 import androidx.mediarouter.media.MediaRouteSelector
 import androidx.mediarouter.media.MediaRouter
+import app.lumicast.Diag
 import app.lumicast.MainActivity
 import app.lumicast.domain.CastDevice
 import app.lumicast.domain.CastGateway
@@ -78,8 +79,13 @@ class GoogleCastGateway(context: Context) : CastGateway {
                 MediaStatus.PLAYER_STATE_PLAYING -> PlayStatus.Playing
                 MediaStatus.PLAYER_STATE_PAUSED -> PlayStatus.Paused
                 MediaStatus.PLAYER_STATE_BUFFERING, MediaStatus.PLAYER_STATE_LOADING -> PlayStatus.Buffering
-                else -> if (client.idleReason == MediaStatus.IDLE_REASON_NONE) PlayStatus.Connecting else PlayStatus.Idle
+                else -> when (client.idleReason) {
+                    MediaStatus.IDLE_REASON_NONE -> PlayStatus.Connecting
+                    MediaStatus.IDLE_REASON_FINISHED -> PlayStatus.Ended
+                    else -> PlayStatus.Idle
+                }
             }
+            Diag.log("cast", "estado=${client.playerState} motivo=${client.idleReason} -> $status")
             _playback.update { it.copy(status = status) }
         }
     }
@@ -135,8 +141,10 @@ class GoogleCastGateway(context: Context) : CastGateway {
                     }
                     override fun onSessionStarted(session: CastSession, sessionId: String) = done(Result.success(session))
                     override fun onSessionResumed(session: CastSession, wasSuspended: Boolean) = done(Result.success(session))
-                    override fun onSessionStartFailed(session: CastSession, error: Int) =
+                    override fun onSessionStartFailed(session: CastSession, error: Int) {
+                        Diag.log("cast", "sessão falhou: $error")
                         done(Result.failure(IllegalStateException("Não foi possível conectar à TV (código $error).")))
+                    }
                     override fun onSessionStarting(session: CastSession) = Unit
                     override fun onSessionEnding(session: CastSession) = Unit
                     override fun onSessionEnded(session: CastSession, error: Int) = Unit

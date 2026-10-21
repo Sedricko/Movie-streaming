@@ -42,7 +42,9 @@ sealed interface AuthState {
     data class Failed(val message: String) : AuthState
 }
 
-enum class PlayStatus { Idle, Connecting, Buffering, Playing, Paused }
+enum class PlayStatus { Idle, Connecting, Buffering, Playing, Paused,
+    /** O vídeo chegou ao fim (a fila avança). */
+    Ended }
 
 data class PlaybackState(
     val video: TgVideo? = null,
