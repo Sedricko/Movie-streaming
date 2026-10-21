@@ -31,6 +31,12 @@ interface TelegramGateway {
     suspend fun openStream(video: TgVideo): StreamSource
     suspend fun closeStream(video: TgVideo)
 
+    /** Baixa o vídeo inteiro e devolve o caminho local (cache do Telegram). */
+    suspend fun download(video: TgVideo): String
+
+    /** Apaga a cópia do cache do Telegram (depois de salvar na galeria, para não ocupar o dobro). */
+    suspend fun releaseLocal(video: TgVideo)
+
     /** Caminho local da miniatura (baixa se preciso), ou null se o vídeo não tem. */
     suspend fun thumbnail(video: TgVideo): String?
 }

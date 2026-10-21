@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import app.lumicast.data.cast.FakeCastGateway
 import app.lumicast.data.cast.GoogleCastGateway
+import app.lumicast.data.library.FolderStore
 import app.lumicast.data.telegram.FakeTelegramGateway
 import app.lumicast.data.telegram.TdlibTelegramGateway
 import app.lumicast.domain.CastGateway
@@ -15,6 +16,7 @@ class AppContainer(context: Context) {
     val realMode = BuildConfig.TELEGRAM_API_ID != 0
     val telegram: TelegramGateway = if (realMode) TdlibTelegramGateway(context) else FakeTelegramGateway()
     val cast: CastGateway = if (realMode) GoogleCastGateway(context) else FakeCastGateway()
+    val folders = FolderStore(context)
 }
 
 class LumicastApp : Application() {

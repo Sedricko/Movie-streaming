@@ -54,3 +54,10 @@ data class PlaybackState(
     /** Parte do arquivo já baixada do Telegram, 0f..1f. */
     val downloadedFraction: Float = 0f,
 )
+
+/** Pasta do Lumicast (só no aparelho; não mexe no Telegram). Os vídeos guardam o título que o usuário deu. */
+data class VideoFolder(
+    val id: String,
+    val name: String,
+    val videos: List<TgVideo> = emptyList(),
+)
