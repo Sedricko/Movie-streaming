@@ -43,7 +43,7 @@ class FakeCastGateway : CastGateway {
     override suspend fun play(device: CastDevice, video: TgVideo, streamUrl: String) {
         ticker?.cancel()
         val start = (video.durationSec * video.resumeFraction).toInt()
-        _playback.value = PlaybackState(video, device, PlayStatus.Connecting, start, 0.05f)
+        _playback.value = PlaybackState(video, device, PlayStatus.Connecting, start, 0.05f, volume = 0.5f)
         delay(800)
         _playback.update { it.copy(status = PlayStatus.Buffering) }
         delay(1_200)
@@ -75,6 +75,14 @@ class FakeCastGateway : CastGateway {
 
     override suspend fun seekTo(seconds: Int) {
         _playback.update { it.copy(positionSec = seconds.coerceAtLeast(0)) }
+    }
+
+    override suspend fun setVolume(level: Float) {
+        _playback.update { it.copy(volume = level.coerceIn(0f, 1f)) }
+    }
+
+    override suspend fun setSpeed(rate: Float) {
+        _playback.update { it.copy(speed = rate) }
     }
 
     override suspend fun stop() {

@@ -30,6 +30,9 @@ import app.lumicast.domain.PlayStatus
 import app.lumicast.ui.components.FolderActions
 import app.lumicast.ui.components.MiniPlayer
 import app.lumicast.ui.components.PreviewPlayer
+import app.lumicast.ui.components.SettingsSheet
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import app.lumicast.ui.screens.LibraryScreen
 import app.lumicast.ui.screens.LoginScreen
 import app.lumicast.ui.screens.TvScreen
@@ -85,6 +88,10 @@ fun MainScreen(vm: MainViewModel) {
     val trimStart by vm.trimStart.collectAsStateWithLifecycle()
     val trimEnd by vm.trimEnd.collectAsStateWithLifecycle()
     val selectedTv by vm.selectedTv.collectAsStateWithLifecycle()
+    val settings by vm.settings.collectAsStateWithLifecycle()
+    val conversion by vm.conversion.collectAsStateWithLifecycle()
+    var showSettings by remember { mutableStateOf(false) }
+    if (showSettings) SettingsSheet(settings, onChange = vm::updateSettings, onDismiss = { showSettings = false })
 
     previewUrl?.let { PreviewPlayer(it, onDismiss = { vm.endPreview() }) }
 
@@ -134,6 +141,7 @@ fun MainScreen(vm: MainViewModel) {
                     onPickTv = vm::selectTv,
                     onRescan = vm::rescan,
                     onShareDiagnostics = vm::shareDiagnostics,
+                    onOpenSettings = { showSettings = true },
                     pinned = pinned,
                     onTogglePin = vm::togglePin,
                     loadThumbnail = vm::thumbnail,
@@ -171,6 +179,11 @@ fun MainScreen(vm: MainViewModel) {
                     onStop = vm::stop,
                     onPrevious = vm::previous,
                     onNext = vm::next,
+                    canSkipNext = queue.isNotEmpty() || settings.autoNext,
+                    onVolume = vm::setVolume,
+                    conversion = conversion,
+                    onCancelConversion = vm::cancelConversion,
+                    onSpeed = vm::setSpeed,
                     queue = queue,
                     scheduledAt = scheduledAt,
                     switchEveryMin = switchEveryMin,

@@ -10,6 +10,7 @@ import app.lumicast.domain.StreamSource
 import app.lumicast.domain.TelegramGateway
 import app.lumicast.domain.TgChat
 import app.lumicast.domain.TgVideo
+import app.lumicast.domain.VideoPage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -133,8 +134,10 @@ class TdlibTelegramGateway(context: Context) : TelegramGateway {
     override suspend fun logout() = authStep(TdApi.LogOut())
 
     override suspend fun chats(): List<TgChat> {
-        // LoadChats devolve 404 quando já carregou tudo: não é erro.
-        runCatching { send(TdApi.LoadChats(TdApi.ChatListMain(), CHAT_LIMIT)) }
+        // LoadChats carrega mais um bloco a cada chamada e devolve 404 quando já carregou tudo.
+        for (i in 0 until CHAT_LIMIT / 100) {
+            if (runCatching { send(TdApi.LoadChats(TdApi.ChatListMain(), 100)) }.isFailure) break
+        }
         val ids = (send(TdApi.GetChats(TdApi.ChatListMain(), CHAT_LIMIT)) as TdApi.Chats).chatIds
         val meId = runCatching { (send(TdApi.GetMe()) as TdApi.User).id }.getOrDefault(0L)
         return ids.toList().mapNotNull { id ->
@@ -152,17 +155,17 @@ class TdlibTelegramGateway(context: Context) : TelegramGateway {
         }.sortedBy { it.kind != ChatKind.SavedMessages }
     }
 
-    override suspend fun videos(chatId: Long): List<TgVideo> {
+    override suspend fun videos(chatId: Long, fromMessageId: Long): VideoPage {
         val query = TdApi.SearchChatMessages().apply {
             this.chatId = chatId
             this.query = ""
             filter = TdApi.SearchMessagesFilterVideo()
-            fromMessageId = 0
+            this.fromMessageId = fromMessageId
             offset = 0
-            limit = 50 // shortcut: só a primeira página; paginar por nextFromMessageId quando a UI tiver rolagem infinita.
+            limit = 100 // máximo que o TDLib aceita por página
         }
         val found = send(query) as TdApi.FoundChatMessages
-        return found.messages.mapNotNull { m ->
+        val list = found.messages.mapNotNull { m ->
             val content = m.content as? TdApi.MessageVideo ?: return@mapNotNull null
             val v = content.video
             files[v.video.id] = v.video
@@ -178,6 +181,7 @@ class TdlibTelegramGateway(context: Context) : TelegramGateway {
                 thumbnailFileId = v.thumbnail?.file?.id,
             )
         }
+        return VideoPage(list, found.nextFromMessageId)
     }
 
     override suspend fun openStream(video: TgVideo): StreamSource {
@@ -270,7 +274,7 @@ class TdlibTelegramGateway(context: Context) : TelegramGateway {
     }
 
     private companion object {
-        const val CHAT_LIMIT = 100
+        const val CHAT_LIMIT = 2_000
         const val STREAM_PRIORITY = 32
         const val READ_TIMEOUT_MS = 30_000L
         const val MOVE_COOLDOWN_MS = 1_000L

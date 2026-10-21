@@ -31,6 +31,8 @@ Marque `[x]` ao concluir. Sempre: build verde + testes + atualizar este arquivo.
 - **Aceite:** vídeo de 1 GB do Telegram começa na Chromecast em < 10 s, seek funciona, tela do celular pode apagar.
 
 ## M4 — DLNA/UPnP
+- [x] `DlnaCastGateway` próprio (sem jUPnP): SSDP M-SEARCH + descrição UPnP, SOAP AVTransport/RenderingControl,
+      DIDL-Lite, polling de estado/posição; `MultiCastGateway` junta Cast + DLNA numa lista. **Não testado em TV real.**
 - [ ] `DlnaCastGateway` com jUPnP: descoberta SSDP, `AVTransport`/`RenderingControl`, DIDL-Lite correto.
 - [ ] Lista unificada de TVs (Cast + DLNA), ícone do protocolo, última TV favorita.
 - **Aceite:** reproduz em ao menos 2 TVs DLNA diferentes (ex.: Samsung/LG/Sony) com seek e volume.
@@ -47,6 +49,9 @@ Marque `[x]` ao concluir. Sempre: build verde + testes + atualizar este arquivo.
 - [x] Layout reorganizado: 2 abas (Biblioteca · TV). TV escolhida num lugar só (aba TV, lembrada entre aberturas);
       tocar num vídeo = "Transmitir na <TV>" + No celular/Fila/Pasta; baixar só pela seleção (segurar) e pela fila;
       diagnóstico e sair no menu ⋮.
+
+- [x] Paginação (todos os vídeos/chats), continuar de onde parou, próximo episódio automático, volume e velocidade,
+      tela Configurações (cada recurso automático liga/desliga).
 
 ## M6 — Expansão (v2)
 - [ ] Roku (ECP), Fire TV (Fling), LG webOS, Samsung/Tizen. Transcodificação/HLS sob demanda.

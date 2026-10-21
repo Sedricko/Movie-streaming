@@ -1,6 +1,7 @@
 package app.lumicast.data.stream
 
 import app.lumicast.Diag
+import app.lumicast.data.dlna.DLNA_FEATURES
 import app.lumicast.domain.StreamSource
 import io.ktor.http.ContentType
 import io.ktor.http.Headers
@@ -83,6 +84,7 @@ class RangeStreamServer(
         call.response.header(HttpHeaders.AcceptRanges, "bytes")
         call.response.header(HttpHeaders.AccessControlAllowOrigin, "*")
         call.response.header("transferMode.dlna.org", "Streaming")
+        call.response.header("contentFeatures.dlna.org", DLNA_FEATURES) // TVs DLNA exigentes (Samsung/LG) pedem isso
 
         when (val r = RangeParser.parse(call.request.headers[HttpHeaders.Range], size)) {
             RangeResult.Unsatisfiable -> {

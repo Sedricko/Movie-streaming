@@ -1,6 +1,8 @@
 package app.lumicast.domain
 
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.emptyFlow
 
 /**
  * Fonte de bytes de um vídeo que pode ainda estar sendo baixado.
@@ -30,7 +32,8 @@ interface TelegramGateway {
     suspend fun logout()
 
     suspend fun chats(): List<TgChat>
-    suspend fun videos(chatId: Long): List<TgVideo>
+    /** Vídeos do chat em páginas: comece com [fromMessageId] = 0 e siga com [VideoPage.next]. */
+    suspend fun videos(chatId: Long, fromMessageId: Long = 0): VideoPage
 
     /** Inicia o download progressivo e devolve a fonte que o servidor local vai servir. */
     suspend fun openStream(video: TgVideo): StreamSource
@@ -56,5 +59,14 @@ interface CastGateway {
     suspend fun play(device: CastDevice, video: TgVideo, streamUrl: String)
     suspend fun togglePause()
     suspend fun seekTo(seconds: Int)
+
+    /** A TV recusou o vídeo antes de começar a tocar (formato/codec que ela não aceita). */
+    val formatErrors: Flow<TgVideo> get() = emptyFlow()
+
+    /** Volume da TV, 0f..1f. Pode lançar UnsupportedOperationException se a TV não deixar. */
+    suspend fun setVolume(level: Float)
+
+    /** Velocidade (1f = normal). Pode lançar UnsupportedOperationException se a TV não deixar. */
+    suspend fun setSpeed(rate: Float)
     suspend fun stop()
 }

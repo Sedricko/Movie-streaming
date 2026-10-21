@@ -6,9 +6,12 @@ import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.lumicast.data.library.SavedVideoSource
+import app.lumicast.data.library.VideoConverter
+import android.net.Uri
 import app.lumicast.data.library.saveToDownloads
 import app.lumicast.data.stream.RangeStreamServer
 import app.lumicast.data.stream.findLanIPv4
+import app.lumicast.domain.AppSettings
 import app.lumicast.domain.CastDevice
 import app.lumicast.domain.NaturalTitleOrder
 import app.lumicast.domain.PlayStatus
@@ -20,6 +23,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import java.io.File
+import kotlin.math.abs
 import java.util.UUID
 import app.lumicast.domain.StreamSource
 import kotlinx.coroutines.Job
@@ -58,6 +62,46 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _selectedTvId.value = device.id
         prefs.edit().putString("tv", device.id).apply()
     }
+
+    private val _settings = MutableStateFlow(
+        AppSettings(
+            resume = prefs.getBoolean("set.resume", true),
+            autoNext = prefs.getBoolean("set.autoNext", true),
+            dlna = prefs.getBoolean("set.dlna", true),
+            volumeKeys = prefs.getBoolean("set.volumeKeys", true),
+            autoConvert = prefs.getBoolean("set.autoConvert", true),
+        ),
+    )
+    val settings: StateFlow<AppSettings> = _settings.asStateFlow()
+
+    fun updateSettings(new: AppSettings) {
+        val dlnaChanged = new.dlna != _settings.value.dlna
+        _settings.value = new
+        prefs.edit()
+            .putBoolean("set.resume", new.resume).putBoolean("set.autoNext", new.autoNext)
+            .putBoolean("set.dlna", new.dlna).putBoolean("set.volumeKeys", new.volumeKeys)
+            .putBoolean("set.autoConvert", new.autoConvert)
+            .commit() // commit: o MultiCastGateway lê "set.dlna" logo em seguida
+        if (dlnaChanged) cast.startDiscovery()
+    }
+
+    fun setVolume(level: Float) = viewModelScope.launch { runCatching { cast.setVolume(level) }.onFailure(::toast) }
+
+    /** Teclas de volume do celular → volume da TV. false = não está transmitindo (o celular trata a tecla). */
+    fun nudgeVolume(up: Boolean): Boolean {
+        val p = playback.value
+        if (!_settings.value.volumeKeys || p.video == null) return false
+        setVolume(((p.volume ?: 0.5f) + if (up) 0.05f else -0.05f).coerceIn(0f, 1f))
+        return true
+    }
+
+    fun setSpeed(rate: Float) = viewModelScope.launch { runCatching { cast.setSpeed(rate) }.onFailure(::toast) }
+
+    /** Quanto de cada vídeo já foi assistido (0..1), por chat:mensagem. Mostrado nas miniaturas e usado para continuar. */
+    private val progressPrefs = app.getSharedPreferences("progress", 0)
+    private val _progress = MutableStateFlow(progressPrefs.all.mapNotNull { (k, v) -> (v as? Float)?.let { k to it } }.toMap())
+    private fun keyOf(v: TgVideo) = "${v.chatId}:${v.messageId}"
+    private fun withProgress(list: List<TgVideo>, p: Map<String, Float>) = list.map { it.copy(resumeFraction = p[keyOf(it)] ?: 0f) }
     private val _pinned = MutableStateFlow(prefs.getStringSet("pinned", emptySet())!!.mapNotNull { it.toLongOrNull() }.toSet())
     val pinned: StateFlow<Set<Long>> = _pinned.asStateFlow()
 
@@ -74,7 +118,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val openChat: StateFlow<TgChat?> = _openChat.asStateFlow()
 
     private val _videos = MutableStateFlow<List<TgVideo>>(emptyList())
-    val videos: StateFlow<List<TgVideo>> = _videos.asStateFlow()
+    val videos: StateFlow<List<TgVideo>> = combine(_videos, _progress, ::withProgress)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    private var openJob: Job? = null
 
     private val _loading = MutableStateFlow(false)
     val loading: StateFlow<Boolean> = _loading.asStateFlow()
@@ -109,7 +155,25 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         // Vídeo terminou na TV → próximo da fila na mesma TV.
         viewModelScope.launch {
             cast.playback.map { it.status }.distinctUntilChanged().collect { status ->
-                if (status == PlayStatus.Ended) queueDevice?.let(::playNext)
+                if (status == PlayStatus.Ended) queueDevice?.let { advance(it, stopIfNothing = false) }
+            }
+        }
+        viewModelScope.launch { cast.formatErrors.collect(::onFormatError) }
+        // Guarda até onde cada vídeo foi assistido (a cada 1% e no fim).
+        viewModelScope.launch {
+            cast.playback.collect { p ->
+                val v = p.video ?: return@collect
+                val frac = when {
+                    p.status == PlayStatus.Ended -> 1f
+                    p.status == PlayStatus.Playing && v.durationSec > 0 -> (p.positionSec.toFloat() / v.durationSec).coerceIn(0f, 1f)
+                    else -> return@collect
+                }
+                val key = keyOf(v)
+                val old = _progress.value[key]
+                if (old == null || abs(frac - old) >= 0.01f || (frac == 1f && old != 1f)) {
+                    _progress.value += key to frac
+                    progressPrefs.edit().putFloat(key, frac).apply()
+                }
             }
         }
         // Chegou no "Terminar em" → próximo da fila (ou parar, se a fila acabou).
@@ -121,14 +185,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 if (end <= 0 || end >= video.durationSec || p.status != PlayStatus.Playing || p.positionSec < end) return@collect
                 if (trimmedFileId == video.fileId) return@collect
                 trimmedFileId = video.fileId
-                if (_queue.value.isNotEmpty()) queueDevice?.let(::playNext) else stop()
+                queueDevice?.let { advance(it, stopIfNothing = true) } ?: stop()
             }
         }
     }
 
     val folders: StateFlow<List<VideoFolder>> = container.folders.folders
     private val _openFolderId = MutableStateFlow<String?>(null)
-    val openFolder: StateFlow<VideoFolder?> = combine(folders, _openFolderId) { fs, id -> fs.firstOrNull { it.id == id } }
+    val openFolder: StateFlow<VideoFolder?> = combine(folders, _openFolderId, _progress) { fs, id, p ->
+        fs.firstOrNull { it.id == id }?.let { it.copy(videos = withProgress(it.videos, p)) }
+    }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     /** Texto do download de pasta em andamento ("Baixando 2 de 5…"), ou null. */
@@ -261,7 +327,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun next() {
-        (queueDevice ?: cast.playback.value.device)?.let(::playNext)
+        (queueDevice ?: cast.playback.value.device)?.let { advance(it, stopIfNothing = false) }
     }
 
     /** Volta para o vídeo anterior; o atual volta para o começo da fila. Sem anterior, recomeça o atual. */
@@ -298,6 +364,30 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _scheduledAt.value = null
     }
 
+    /** Terminou um vídeo: próximo da fila; sem fila, próximo episódio (se ligado); senão para ou fica onde está. */
+    private fun advance(device: CastDevice, stopIfNothing: Boolean) {
+        if (_queue.value.isNotEmpty()) return playNext(device)
+        val next = if (_settings.value.autoNext) nextEpisode() else null
+        when {
+            next != null -> {
+                cast.playback.value.video?.let { history.addLast(it) }
+                castTo(next, device)
+            }
+            stopIfNothing -> stop()
+        }
+    }
+
+    /** Próximo vídeo pelo nome (ordem 1→9) na pasta ou no chat de onde veio o atual. */
+    private fun nextEpisode(): TgVideo? {
+        val current = cast.playback.value.video ?: return null
+        val key = keyOf(current)
+        val list = folders.value.firstOrNull { it.id == _openFolderId.value }?.videos?.takeIf { vs -> vs.any { keyOf(it) == key } }
+            ?: _videos.value.takeIf { vs -> vs.any { keyOf(it) == key } }
+            ?: return null
+        val sorted = list.sortedWith(NaturalTitleOrder)
+        return sorted.getOrNull(sorted.indexOfFirst { keyOf(it) == key } + 1)
+    }
+
     private fun playNext(device: CastDevice) {
         val next = _queue.value.firstOrNull() ?: return
         _queue.value = _queue.value.drop(1)
@@ -317,15 +407,29 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _loading.value = false
     }
 
-    fun open(chat: TgChat) = viewModelScope.launch {
+    /** Abre o chat e vai trazendo os vídeos página por página (a lista aparece já na primeira). */
+    fun open(chat: TgChat) {
+        openJob?.cancel()
         _openFolderId.value = null
         _openChat.value = chat
-        _loading.value = true
-        _videos.value = telegram.videos(chat.id)
-        _loading.value = false
+        _videos.value = emptyList()
+        openJob = viewModelScope.launch {
+            _loading.value = true
+            var next = 0L
+            runCatching {
+                do {
+                    val page = telegram.videos(chat.id, next)
+                    _videos.value += page.videos
+                    _loading.value = false
+                    next = page.next
+                } while (next != 0L && page.videos.isNotEmpty() && _videos.value.size < MAX_VIDEOS)
+            }.onFailure { if (it is CancellationException) throw it else toast(it) }
+            _loading.value = false
+        }
     }
 
     fun closeChat() {
+        openJob?.cancel()
         _openFolderId.value = null
         _openChat.value = null
         _videos.value = emptyList()
@@ -342,10 +446,65 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Vídeo já salvo na galeria por este app: transmitir do arquivo, sem baixar do Telegram de novo. */
     private fun savedSource(video: TgVideo): StreamSource? {
+        convertedSource(video)?.let { return it }
         val uri = prefs.getString(savedKey(video), null) ?: return null
         val source = SavedVideoSource.open(getApplication(), uri, video.mimeType)
         if (source == null) prefs.edit().remove(savedKey(video)).apply() // apagaram da galeria: volta a usar o Telegram
         return source
+    }
+
+    private fun convertedKey(video: TgVideo) = "conv:${video.chatId}:${video.messageId}"
+
+    /** Versão MP4 já convertida deste vídeo (o Android pode apagar o cache: aí some e converte de novo se preciso). */
+    private fun convertedSource(video: TgVideo): StreamSource? {
+        val uri = prefs.getString(convertedKey(video), null) ?: return null
+        val source = SavedVideoSource.open(getApplication(), uri, "video/mp4")
+        if (source == null) prefs.edit().remove(convertedKey(video)).apply()
+        return source
+    }
+
+    private val converter = VideoConverter(app)
+    private var convertJob: Job? = null
+
+    /** "Convertendo para MP4: 40%", ou null. Mostrado na aba TV. */
+    private val _conversion = MutableStateFlow<String?>(null)
+    val conversion: StateFlow<String?> = _conversion.asStateFlow()
+
+    fun cancelConversion() {
+        convertJob?.cancel()
+    }
+
+    /** A TV recusou o formato: converte para MP4 (se ligado) e transmite o convertido na mesma TV. */
+    private fun onFormatError(video: TgVideo) {
+        val device = queueDevice ?: return
+        val msg = "A TV não aceitou o formato deste vídeo."
+        when {
+            !_settings.value.autoConvert -> Toast.makeText(getApplication(), "$msg Ligue \"Converter formato\" nas Configurações.", Toast.LENGTH_LONG).show()
+            convertedSource(video)?.also { it.close() } != null ->
+                Toast.makeText(getApplication(), "$msg Nem a versão convertida tocou nesta TV.", Toast.LENGTH_LONG).show()
+            convertJob?.isActive == true -> Unit
+            else -> convertJob = viewModelScope.launch {
+                Diag.log("convert", "file=${video.fileId} (${video.mimeType}) recusado pela TV: convertendo")
+                try {
+                    _conversion.value = "Baixando “${video.title}” para converter…"
+                    val input = prefs.getString(savedKey(video), null)?.let(Uri::parse) ?: Uri.fromFile(File(telegram.download(video)))
+                    val out = File(getApplication<Application>().cacheDir, "convertidos/${video.chatId}_${video.messageId}.mp4")
+                    converter.toMp4(input, out) { p -> _conversion.value = "Convertendo para MP4: $p%" }
+                    prefs.edit().putString(convertedKey(video), Uri.fromFile(out).toString()).apply()
+                    Diag.log("convert", "file=${video.fileId} convertido (${out.length()} B)")
+                    _conversion.value = null
+                    convertJob = null // o castTo abaixo não deve cancelar a si mesmo
+                    castTo(video, device)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Diag.log("convert", "falhou: ${e.stackTraceToString().take(600)}")
+                    Toast.makeText(getApplication(), "Não deu para converter este vídeo (${e.message}).", Toast.LENGTH_LONG).show()
+                } finally {
+                    _conversion.value = null
+                }
+            }
+        }
     }
 
     fun togglePin(chat: TgChat) {
@@ -406,10 +565,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** TDLib (download progressivo) → servidor HTTP local na LAN → TV. No modo demonstração, só simula. */
     fun castTo(original: TgVideo, device: CastDevice) = viewModelScope.launch {
+        convertJob?.cancel() // escolheu outro vídeo: esquecer a conversão em andamento
         val start = _trimStart.value
-        // O "Começar em" usa o mesmo caminho do "retomar de onde parou" (os gateways começam em duração × fração).
+        val saved = _progress.value[keyOf(original)]
+        // Os gateways começam em duração × resumeFraction. Ordem: continuar de onde parou → "Começar em" → início.
         // +0,5 s porque os gateways truncam: 90 s não pode virar 89.
-        val video = if (start in 1 until original.durationSec) original.copy(resumeFraction = (start + 0.5f) / original.durationSec) else original
+        val video = when {
+            _settings.value.resume && saved != null && saved in 0.01f..0.95f -> original.copy(resumeFraction = saved)
+            start in 1 until original.durationSec -> original.copy(resumeFraction = (start + 0.5f) / original.durationSec)
+            else -> original.copy(resumeFraction = 0f)
+        }
         queueDevice = device
         if (_selectedTvId.value != device.id) selectTv(device)
         switchJob?.cancel()
@@ -427,7 +592,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             streaming = video to url
             streamSource = source
             progressJob = viewModelScope.launch { while (true) { downloaded.value = source.downloadedFraction; delay(1_000) } }
-            cast.play(device, video, url)
+            cast.play(device, video.copy(mimeType = source.mimeType, sizeBytes = source.sizeBytes), url)
             Diag.log("vm", "transmitindo file=${video.fileId} (${video.mimeType}, ${video.sizeBytes} B) em ${device.protocol}")
         }.onFailure {
             endStream()
@@ -447,6 +612,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun togglePause() = viewModelScope.launch { cast.togglePause() }
     fun seekTo(sec: Int) = viewModelScope.launch { cast.seekTo(sec) }
     fun stop() = viewModelScope.launch {
+        convertJob?.cancel()
         switchJob?.cancel()
         queueDevice = null // parar à mão não puxa o próximo da fila
         cast.stop()
@@ -456,5 +622,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     override fun onCleared() {
         server?.stop()
         cast.stopDiscovery()
+    }
+
+    private companion object {
+        const val MAX_VIDEOS = 5_000 // canais enormes: o suficiente sem travar a lista
     }
 }

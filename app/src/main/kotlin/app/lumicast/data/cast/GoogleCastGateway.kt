@@ -33,6 +33,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -77,6 +79,9 @@ class GoogleCastGateway(context: Context) : CastGateway {
     private val _devices = MutableStateFlow<List<CastDevice>>(emptyList())
     override val devices: StateFlow<List<CastDevice>> = _devices.asStateFlow()
 
+    private val _formatErrors = MutableSharedFlow<TgVideo>(extraBufferCapacity = 4)
+    override val formatErrors: Flow<TgVideo> = _formatErrors
+
     private val _playback = MutableStateFlow(PlaybackState())
     override val playback: StateFlow<PlaybackState> = _playback.asStateFlow()
 
@@ -106,8 +111,8 @@ class GoogleCastGateway(context: Context) : CastGateway {
                     reconnect("a TV parou com erro") // ex.: Wi-Fi oscilou e a TV perdeu o stream
                     return
                 }
+                casting?.second?.let { _formatErrors.tryEmit(it) } // o ViewModel decide: converter ou avisar
                 casting = null
-                Toast.makeText(appContext, "A TV não conseguiu tocar este vídeo. O formato pode não ser aceito por ela (prefira MP4).", Toast.LENGTH_LONG).show()
             }
             if (status == PlayStatus.Ended) casting = null // terminou de verdade: nada a retomar
             _playback.update { it.copy(status = status) }
@@ -211,6 +216,7 @@ class GoogleCastGateway(context: Context) : CastGateway {
             .setMetadata(MediaMetadata(MediaMetadata.MEDIA_TYPE_MOVIE).apply { putString(MediaMetadata.KEY_TITLE, video.title) })
             .build()
         client.load(MediaLoadRequestData.Builder().setMediaInfo(info).setAutoplay(true).setCurrentTime(start * 1000).build())
+        _playback.update { it.copy(volume = session.volume.toFloat()) }
         casting = Triple(device, video, streamUrl)
     }
 
@@ -255,6 +261,17 @@ class GoogleCastGateway(context: Context) : CastGateway {
     override suspend fun seekTo(seconds: Int) = withContext(Dispatchers.Main) {
         client()?.seek(MediaSeekOptions.Builder().setPosition(seconds.coerceAtLeast(0) * 1000L).build())
         Unit
+    }
+
+    override suspend fun setVolume(level: Float) = withContext(Dispatchers.Main) {
+        val v = level.coerceIn(0f, 1f)
+        castContext.sessionManager.currentCastSession?.volume = v.toDouble()
+        _playback.update { it.copy(volume = v) }
+    }
+
+    override suspend fun setSpeed(rate: Float) = withContext(Dispatchers.Main) {
+        client()?.setPlaybackRate(rate.toDouble())
+        _playback.update { it.copy(speed = rate) }
     }
 
     override suspend fun stop() = withContext(Dispatchers.Main) {

@@ -72,6 +72,7 @@ fun LibraryScreen(
     onPickTv: (CastDevice) -> Unit,
     onRescan: () -> Unit,
     onShareDiagnostics: () -> Unit,
+    onOpenSettings: () -> Unit,
     pinned: Set<Long>,
     onTogglePin: (TgChat) -> Unit,
     loadThumbnail: suspend (TgVideo) -> String?,
@@ -163,6 +164,7 @@ fun LibraryScreen(
                         description = if (castActive) "Abrir transmissão em andamento" else "Escolher uma TV",
                     )
                     OverflowMenu(menuOpen, { menuOpen = it }, "Mais opções") {
+                        DropdownMenuItem(text = { Text("Configurações") }, onClick = { menuOpen = false; onOpenSettings() })
                         DropdownMenuItem(text = { Text("Enviar diagnóstico") }, onClick = { menuOpen = false; onShareDiagnostics() })
                         DropdownMenuItem(text = { Text("Sair da conta") }, onClick = { menuOpen = false; onLogout() })
                     }
