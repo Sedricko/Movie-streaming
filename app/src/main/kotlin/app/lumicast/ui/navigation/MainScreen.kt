@@ -28,6 +28,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import app.lumicast.MainViewModel
 import app.lumicast.domain.AuthState
+import app.lumicast.domain.PlayStatus
 import app.lumicast.ui.components.FolderActions
 import app.lumicast.ui.components.MiniPlayer
 import app.lumicast.ui.components.PreviewPlayer
@@ -145,6 +146,15 @@ fun MainScreen(vm: MainViewModel) {
                     onCast = vm::castTo,
                     onGoToPlaying = { go(Tab.Playing) },
                     castActive = playback.video != null,
+                    castConnecting = playback.status in listOf(PlayStatus.Connecting, PlayStatus.Buffering, PlayStatus.Reconnecting),
+                    castStatus = playback.device?.takeIf { playback.video != null }?.let { tv ->
+                        when (playback.status) {
+                            PlayStatus.Connecting, PlayStatus.Buffering -> "Conectando à ${tv.name}…"
+                            PlayStatus.Reconnecting -> "Conexão instável. Reconectando à ${tv.name}…"
+                            PlayStatus.Idle, PlayStatus.Ended -> null
+                            else -> "● Conectado à ${tv.name}"
+                        }
+                    },
                     onBeam = { go(if (playback.video != null) Tab.Playing else Tab.Devices) },
                 )
             }

@@ -26,7 +26,13 @@ import com.google.android.gms.cast.framework.SessionProvider
 import com.google.android.gms.cast.framework.media.CastMediaOptions
 import com.google.android.gms.cast.framework.media.NotificationOptions
 import com.google.android.gms.cast.framework.media.RemoteMediaClient
+import android.widget.Toast
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -53,6 +59,14 @@ class CastOptionsProvider : OptionsProvider {
 
 /** Google Cast (Chromecast/Google TV). Todas as chamadas do SDK rodam na thread principal. */
 class GoogleCastGateway(context: Context) : CastGateway {
+    private val appContext = context.applicationContext
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+    /** O que está na TV agora, para reconectar se a conexão cair; null depois de parar ou terminar. */
+    private var casting: Triple<CastDevice, TgVideo, String>? = null
+    private var reconnectJob: Job? = null
+    /** Já tocou desde o último load? Erro antes de tocar é formato que a TV não aceita, não queda de rede. */
+    private var playedSinceLoad = false
     private val router = MediaRouter.getInstance(context)
     @Suppress("DEPRECATION") // a versão com Executor devolve Task; a síncrona basta aqui
     private val castContext = CastContext.getSharedInstance(context)
@@ -86,12 +100,80 @@ class GoogleCastGateway(context: Context) : CastGateway {
                 }
             }
             Diag.log("cast", "estado=${client.playerState} motivo=${client.idleReason} -> $status")
+            if (status == PlayStatus.Playing) playedSinceLoad = true
+            if (client.playerState == MediaStatus.PLAYER_STATE_IDLE && client.idleReason == MediaStatus.IDLE_REASON_ERROR) {
+                if (playedSinceLoad) {
+                    reconnect("a TV parou com erro") // ex.: Wi-Fi oscilou e a TV perdeu o stream
+                    return
+                }
+                casting = null
+                Toast.makeText(appContext, "A TV não conseguiu tocar este vídeo. O formato pode não ser aceito por ela (prefira MP4).", Toast.LENGTH_LONG).show()
+            }
+            if (status == PlayStatus.Ended) casting = null // terminou de verdade: nada a retomar
             _playback.update { it.copy(status = status) }
         }
     }
 
     private val progress = RemoteMediaClient.ProgressListener { positionMs, _ ->
         _playback.update { it.copy(positionSec = (positionMs / 1000).toInt()) }
+    }
+
+    /** Fica de olho na sessão o tempo todo (não só ao conectar) para perceber quedas. */
+    private val sessionWatcher = object : SessionManagerListener<CastSession> {
+        override fun onSessionSuspended(session: CastSession, reason: Int) {
+            if (casting == null) return
+            Diag.log("cast", "sessão suspensa ($reason): o SDK tenta retomar sozinho")
+            _playback.update { it.copy(status = PlayStatus.Reconnecting) }
+        }
+        override fun onSessionResumed(session: CastSession, wasSuspended: Boolean) {
+            if (casting == null) return
+            Diag.log("cast", "sessão retomada")
+            session.remoteMediaClient?.let { attach(it); it.requestStatus() }
+        }
+        override fun onSessionResumeFailed(session: CastSession, error: Int) = reconnect("não retomou a sessão ($error)")
+        override fun onSessionEnded(session: CastSession, error: Int) {
+            if (error != 0) reconnect("sessão caiu ($error)") // error 0 = encerrada de propósito (ex.: pela TV)
+        }
+        override fun onSessionStarted(session: CastSession, sessionId: String) = Unit
+        override fun onSessionStartFailed(session: CastSession, error: Int) = Unit
+        override fun onSessionStarting(session: CastSession) = Unit
+        override fun onSessionEnding(session: CastSession) = Unit
+        override fun onSessionResuming(session: CastSession, sessionId: String) = Unit
+    }
+
+    init {
+        castContext.sessionManager.addSessionManagerListener(sessionWatcher, CastSession::class.java)
+    }
+
+    /** Tenta voltar para a mesma TV e retomar o vídeo onde parou, esperando cada vez mais entre tentativas. */
+    private fun reconnect(reason: String) {
+        val (device, video, url) = casting ?: return
+        if (reconnectJob?.isActive == true) return
+        Diag.log("cast", "reconectando: $reason")
+        reconnectJob = scope.launch {
+            val pos = _playback.value.positionSec
+            val resume = if (video.durationSec > 0) video.copy(resumeFraction = (pos + 0.5f) / video.durationSec) else video
+            for (wait in RETRY_DELAYS_MS) {
+                _playback.update { it.copy(status = PlayStatus.Reconnecting) }
+                delay(wait)
+                val ok = runCatching { load(device, resume, url) }
+                    .onFailure { Diag.log("cast", "tentativa de reconectar falhou: ${it.message}") }
+                    .isSuccess
+                if (ok) return@launch
+            }
+            Diag.log("cast", "desisti de reconectar")
+            casting = null
+            _playback.update { it.copy(status = PlayStatus.Idle) }
+            Toast.makeText(appContext, "Não deu para reconectar à ${device.name}. Confira o Wi-Fi e transmita de novo.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun attach(client: RemoteMediaClient) {
+        // a sessão é reaproveitada entre vídeos da fila: tirar antes de pôr, senão cada evento chega N vezes
+        client.unregisterCallback(mediaCallback)
+        client.removeProgressListener(progress)
+        client.registerCallback(mediaCallback)
+        client.addProgressListener(progress, 1_000)
     }
 
     private fun client(): RemoteMediaClient? = castContext.sessionManager.currentCastSession?.remoteMediaClient
@@ -110,15 +192,18 @@ class GoogleCastGateway(context: Context) : CastGateway {
     override fun stopDiscovery() = router.removeCallback(routerCallback)
 
     override suspend fun play(device: CastDevice, video: TgVideo, streamUrl: String) = withContext(Dispatchers.Main) {
+        reconnectJob?.cancel() // o usuário escolheu outro vídeo: esquecer a reconexão pendente
+        load(device, video, streamUrl)
+    }
+
+    private suspend fun load(device: CastDevice, video: TgVideo, streamUrl: String) = withContext(Dispatchers.Main) {
+        casting = null // trocar de TV encerra a sessão anterior; isso não é queda
+        playedSinceLoad = false
         val start = (video.durationSec * video.resumeFraction).toLong()
         _playback.value = PlaybackState(video, device, PlayStatus.Connecting, start.toInt())
         val session = connect(device)
         val client = session.remoteMediaClient ?: error("A TV não aceitou a conexão.")
-        // a sessão é reaproveitada entre vídeos da fila: tirar antes de pôr, senão cada evento chega N vezes
-        client.unregisterCallback(mediaCallback)
-        client.removeProgressListener(progress)
-        client.registerCallback(mediaCallback)
-        client.addProgressListener(progress, 1_000)
+        attach(client)
         val info = MediaInfo.Builder(streamUrl)
             .setStreamType(MediaInfo.STREAM_TYPE_BUFFERED)
             .setContentType(video.mimeType)
@@ -126,7 +211,7 @@ class GoogleCastGateway(context: Context) : CastGateway {
             .setMetadata(MediaMetadata(MediaMetadata.MEDIA_TYPE_MOVIE).apply { putString(MediaMetadata.KEY_TITLE, video.title) })
             .build()
         client.load(MediaLoadRequestData.Builder().setMediaInfo(info).setAutoplay(true).setCurrentTime(start * 1000).build())
-        Unit
+        casting = Triple(device, video, streamUrl)
     }
 
     /** Seleciona a rota da TV e espera a sessão Cast abrir (ou reaproveita a que já está aberta nela). */
@@ -173,6 +258,8 @@ class GoogleCastGateway(context: Context) : CastGateway {
     }
 
     override suspend fun stop() = withContext(Dispatchers.Main) {
+        casting = null // parada pedida: não reconectar
+        reconnectJob?.cancel()
         client()?.run {
             unregisterCallback(mediaCallback)
             removeProgressListener(progress)
@@ -180,5 +267,9 @@ class GoogleCastGateway(context: Context) : CastGateway {
         }
         castContext.sessionManager.endCurrentSession(true)
         _playback.value = PlaybackState()
+    }
+
+    private companion object {
+        val RETRY_DELAYS_MS = listOf(2_000L, 4_000L, 8_000L, 15_000L, 30_000L)
     }
 }

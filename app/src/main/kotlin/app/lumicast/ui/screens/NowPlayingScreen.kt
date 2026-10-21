@@ -67,6 +67,7 @@ fun NowPlayingScreen(
         PlayStatus.Paused -> "Pausado na ${state.device?.name}"
         PlayStatus.Idle -> ""
         PlayStatus.Ended -> "Terminou na ${state.device?.name}"
+        PlayStatus.Reconnecting -> "Conexão instável. Reconectando à ${state.device?.name}…"
     }
 
     Column(
@@ -87,7 +88,7 @@ fun NowPlayingScreen(
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Icon(Icons.Rounded.Smartphone, contentDescription = "Celular", tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Box(Modifier.weight(1f)) {
-                BeamLine(buffering = state.status == PlayStatus.Connecting || state.status == PlayStatus.Buffering)
+                BeamLine(buffering = state.status in listOf(PlayStatus.Connecting, PlayStatus.Buffering, PlayStatus.Reconnecting))
             }
             Icon(Icons.Rounded.Tv, contentDescription = "TV", tint = MaterialTheme.colorScheme.primary)
         }

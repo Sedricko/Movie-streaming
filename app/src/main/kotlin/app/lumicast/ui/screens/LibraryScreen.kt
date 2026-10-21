@@ -71,6 +71,9 @@ fun LibraryScreen(
     onCast: (TgVideo, CastDevice) -> Unit,
     onGoToPlaying: () -> Unit,
     castActive: Boolean,
+    castConnecting: Boolean,
+    /** "Conectado à SHIELD", "Reconectando…" ou null quando não há TV. */
+    castStatus: String?,
     onBeam: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -114,10 +117,22 @@ fun LibraryScreen(
                     Icon(Icons.Rounded.Download, "Baixar todos os vídeos deste chat, um por vez")
                 }
             } else {
-                Text("Olá, $userName", style = MaterialTheme.typography.titleLarge)
+                Column(Modifier.weight(1f)) {
+                    Text("Olá, $userName", style = MaterialTheme.typography.titleLarge)
+                    castStatus?.let {
+                        Text(
+                            it,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (castConnecting) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.tertiary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     BeamButton(
                         active = castActive,
+                        connecting = castConnecting,
                         onClick = onBeam,
                         description = if (castActive) "Abrir transmissão em andamento" else "Escolher uma TV",
                     )

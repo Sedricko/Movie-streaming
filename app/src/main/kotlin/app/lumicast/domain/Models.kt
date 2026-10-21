@@ -44,7 +44,9 @@ sealed interface AuthState {
 
 enum class PlayStatus { Idle, Connecting, Buffering, Playing, Paused,
     /** O vídeo chegou ao fim (a fila avança). */
-    Ended }
+    Ended,
+    /** A conexão com a TV caiu e o app está tentando voltar sozinho. */
+    Reconnecting }
 
 data class PlaybackState(
     val video: TgVideo? = null,
