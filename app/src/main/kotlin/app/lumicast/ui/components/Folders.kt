@@ -35,8 +35,8 @@ import app.lumicast.domain.VideoFolder
 /** Tudo que a Biblioteca pode fazer com pastas (implementado no MainViewModel). */
 class FolderActions(
     val open: (VideoFolder) -> Unit,
-    val create: (name: String, video: TgVideo?) -> Unit,
-    val addTo: (folderId: String, TgVideo) -> Unit,
+    val create: (name: String, videos: List<TgVideo>) -> Unit,
+    val addTo: (folderId: String, List<TgVideo>) -> Unit,
     val rename: (folderId: String, name: String) -> Unit,
     val delete: (folderId: String) -> Unit,
     val download: (folderId: String) -> Unit,

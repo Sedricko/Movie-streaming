@@ -4,6 +4,11 @@ import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -88,14 +93,23 @@ fun ChatRow(chat: TgChat, pinned: Boolean, onClick: () -> Unit, onTogglePin: () 
 }
 
 @Composable
-fun VideoRow(video: TgVideo, loadThumbnail: suspend (TgVideo) -> String?, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun VideoRow(
+    video: TgVideo,
+    loadThumbnail: suspend (TgVideo) -> String?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    selected: Boolean = false,
+    onLongClick: (() -> Unit)? = null,
+) {
     val thumb by produceState<ImageBitmap?>(null, video.fileId) {
         value = loadThumbnail(video)?.let { path -> withContext(Dispatchers.IO) { BitmapFactory.decodeFile(path)?.asImageBitmap() } }
     }
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .background(if (selected) LumiTheme.extras.feixeSuave else Color.Transparent)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick, onLongClickLabel = "Selecionar vários")
+            .semantics { this.selected = selected }
             .padding(horizontal = 20.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -108,7 +122,11 @@ fun VideoRow(video: TgVideo, loadThumbnail: suspend (TgVideo) -> String?, onClic
             contentAlignment = Alignment.Center,
         ) {
             thumb?.let { Image(it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
-            Icon(Icons.Rounded.PlayArrow, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(
+                if (selected) Icons.Rounded.CheckCircle else Icons.Rounded.PlayArrow,
+                contentDescription = null,
+                tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             if (video.resumeFraction in 0.01f..0.99f) {
                 Box(
                     Modifier

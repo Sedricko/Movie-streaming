@@ -13,6 +13,9 @@ interface StreamSource {
     /** Parte do arquivo já baixada, 0f..1f. */
     val downloadedFraction: Float get() = 1f
 
+    /** Libera o arquivo quando a transmissão termina. */
+    fun close() {}
+
     /** Lê até [length] bytes a partir de [offset] para [buffer]. Retorna o nº de bytes lidos, ou -1 no fim/erro. */
     suspend fun read(offset: Long, buffer: ByteArray, length: Int): Int
 }

@@ -140,6 +140,8 @@ fun MainScreen(vm: MainViewModel) {
                     loadThumbnail = vm::thumbnail,
                     onPreview = vm::preview,
                     onEnqueue = vm::enqueue,
+                    onEnqueueAll = vm::enqueueAll,
+                    onDownloadVideos = vm::downloadVideos,
                     onOpenChat = vm::open,
                     onBack = vm::closeChat,
                     onLogout = vm::logout,
@@ -180,6 +182,8 @@ fun MainScreen(vm: MainViewModel) {
                     onSwitchEvery = vm::setSwitchEvery,
                     onStart = { d, at -> vm.startQueue(d, at); if (at == null) go(Tab.Playing) },
                     onCancelSchedule = vm::cancelSchedule,
+                    onDownloadQueue = vm::downloadQueue,
+                    onClearQueue = vm::clearQueue,
                 )
             }
             composable(Tab.Playing.route) {
