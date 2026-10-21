@@ -2,11 +2,15 @@ package app.lumicast.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.Alignment
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -19,10 +23,14 @@ fun DevicesScreen(
     devices: List<CastDevice>,
     activeDeviceId: String?,
     onRescan: () -> Unit,
+    onShareDiagnostics: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("TVs na rede", style = MaterialTheme.typography.titleLarge)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("TVs na rede", style = MaterialTheme.typography.titleLarge)
+            TextButton(onClick = onShareDiagnostics) { Text("Enviar diagnóstico") }
+        }
         if (devices.isEmpty()) {
             EmptyState(
                 title = "Nenhuma TV encontrada",

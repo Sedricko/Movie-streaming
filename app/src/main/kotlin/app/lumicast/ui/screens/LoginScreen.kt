@@ -14,7 +14,16 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import android.app.Activity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
+import com.google.android.gms.auth.api.identity.GetPhoneNumberHintIntentRequest
+import com.google.android.gms.auth.api.identity.Identity
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -59,6 +68,7 @@ fun LoginScreen(
                     Text(state.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
                     Spacer(Modifier.height(12.dp))
                 }
+                PhoneNumberHint(alreadyTyped = phone.isNotEmpty()) { phone = it }
                 OutlinedTextField(
                     value = phone,
                     onValueChange = { phone = it },
@@ -115,5 +125,20 @@ fun LoginScreen(
 
             is AuthState.Ready -> Unit
         }
+    }
+}
+
+/** Sugere o número do chip (Phone Number Hint do Google): o usuário toca no número e ele já vem preenchido. */
+@Composable
+private fun PhoneNumberHint(alreadyTyped: Boolean, onNumber: (String) -> Unit) {
+    val activity = LocalContext.current as? Activity ?: return
+    val client = remember { Identity.getSignInClient(activity) }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
+        runCatching { client.getPhoneNumberFromIntent(result.data) }.onSuccess(onNumber)
+    }
+    LaunchedEffect(Unit) {
+        if (alreadyTyped) return@LaunchedEffect
+        client.getPhoneNumberHintIntent(GetPhoneNumberHintIntentRequest.builder().build())
+            .addOnSuccessListener { launcher.launch(IntentSenderRequest.Builder(it).build()) } // sem chip/Play Services: segue digitando
     }
 }

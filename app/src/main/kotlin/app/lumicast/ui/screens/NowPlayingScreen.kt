@@ -61,6 +61,7 @@ fun NowPlayingScreen(
         PlayStatus.Playing -> "Transmitindo na ${state.device?.name}"
         PlayStatus.Paused -> "Pausado na ${state.device?.name}"
         PlayStatus.Idle -> ""
+        PlayStatus.Ended -> "Terminou na ${state.device?.name}"
     }
 
     Column(

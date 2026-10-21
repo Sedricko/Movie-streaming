@@ -49,6 +49,7 @@ fun LibraryScreen(
     onTogglePin: (TgChat) -> Unit,
     loadThumbnail: suspend (TgVideo) -> String?,
     onPreview: (TgVideo) -> Unit,
+    onEnqueue: (TgVideo) -> Unit,
     onOpenChat: (TgChat) -> Unit,
     onBack: () -> Unit,
     onLogout: () -> Unit,
@@ -122,8 +123,13 @@ fun LibraryScreen(
         ModalBottomSheet(onDismissRequest = { pending = null }) {
             Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Transmitir “${video.title}”", style = MaterialTheme.typography.titleLarge)
-                OutlinedButton(onClick = { onPreview(video); pending = null }, modifier = Modifier.fillMaxWidth()) {
-                    Text("Ver no celular")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { onPreview(video); pending = null }, modifier = Modifier.weight(1f)) {
+                        Text("Ver no celular")
+                    }
+                    OutlinedButton(onClick = { onEnqueue(video); pending = null }, modifier = Modifier.weight(1f)) {
+                        Text("Adicionar à fila")
+                    }
                 }
                 if (devices.isEmpty()) {
                     Text(

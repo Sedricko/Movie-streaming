@@ -1,12 +1,14 @@
 package app.lumicast
 
 import android.app.Application
+import android.content.Intent
 import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.lumicast.data.stream.RangeStreamServer
 import app.lumicast.data.stream.findLanIPv4
 import app.lumicast.domain.CastDevice
+import app.lumicast.domain.PlayStatus
 import app.lumicast.domain.TgChat
 import app.lumicast.domain.TgVideo
 import app.lumicast.domain.StreamSource
@@ -17,6 +19,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -54,8 +58,73 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _loading = MutableStateFlow(false)
     val loading: StateFlow<Boolean> = _loading.asStateFlow()
 
+    private val _queue = MutableStateFlow<List<TgVideo>>(emptyList())
+    val queue: StateFlow<List<TgVideo>> = _queue.asStateFlow()
+
+    /** Horário marcado para a fila começar (epoch ms), ou null. */
+    private val _scheduledAt = MutableStateFlow<Long?>(null)
+    val scheduledAt: StateFlow<Long?> = _scheduledAt.asStateFlow()
+
+    /** Troca para o próximo da fila a cada N minutos; 0 = só quando o vídeo terminar. */
+    private val _switchEveryMin = MutableStateFlow(0)
+    val switchEveryMin: StateFlow<Int> = _switchEveryMin.asStateFlow()
+
+    private var queueDevice: CastDevice? = null
+    private var scheduleJob: Job? = null
+    private var switchJob: Job? = null
+
     init {
         cast.startDiscovery()
+        // Vídeo terminou na TV → próximo da fila na mesma TV.
+        viewModelScope.launch {
+            cast.playback.map { it.status }.distinctUntilChanged().collect { status ->
+                if (status == PlayStatus.Ended) queueDevice?.let(::playNext)
+            }
+        }
+    }
+
+    fun enqueue(video: TgVideo) {
+        _queue.value += video
+        Toast.makeText(getApplication(), "Adicionado à fila (${_queue.value.size}).", Toast.LENGTH_SHORT).show()
+    }
+
+    fun moveInQueue(index: Int, delta: Int) {
+        val list = _queue.value.toMutableList()
+        val to = index + delta
+        if (index !in list.indices || to !in list.indices) return
+        list.add(to, list.removeAt(index))
+        _queue.value = list
+    }
+
+    fun removeFromQueue(index: Int) {
+        _queue.value = _queue.value.filterIndexed { i, _ -> i != index }
+    }
+
+    fun setSwitchEvery(minutes: Int) {
+        _switchEveryMin.value = minutes
+    }
+
+    /** Começa a fila na [device] agora ou no horário [atMillis]. */
+    fun startQueue(device: CastDevice, atMillis: Long?) {
+        scheduleJob?.cancel()
+        _scheduledAt.value = atMillis
+        // shortcut: o agendamento vive enquanto o app estiver aberto; usar AlarmManager se precisar sobreviver a fechar o app.
+        scheduleJob = viewModelScope.launch {
+            atMillis?.let { delay(it - System.currentTimeMillis()) }
+            _scheduledAt.value = null
+            playNext(device)
+        }
+    }
+
+    fun cancelSchedule() {
+        scheduleJob?.cancel()
+        _scheduledAt.value = null
+    }
+
+    private fun playNext(device: CastDevice) {
+        val next = _queue.value.firstOrNull() ?: return
+        _queue.value = _queue.value.drop(1)
+        castTo(next, device)
     }
 
     fun submitPhone(phone: String) = viewModelScope.launch { telegram.submitPhone(phone) }
@@ -104,8 +173,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         return srv.register(source) to source
     }
 
-    private fun toast(t: Throwable) =
+    fun shareDiagnostics() {
+        val app = getApplication<Application>()
+        val send = Intent(Intent.ACTION_SEND).setType("text/plain")
+            .putExtra(Intent.EXTRA_SUBJECT, "Diagnóstico do Lumicast")
+            .putExtra(Intent.EXTRA_TEXT, Diag.report(app))
+        app.startActivity(Intent.createChooser(send, "Enviar diagnóstico").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+
+    private fun toast(t: Throwable) {
+        Diag.log("erro", t.stackTraceToString().take(800))
         Toast.makeText(getApplication(), t.message ?: "Não foi possível abrir o vídeo. Tente de novo.", Toast.LENGTH_LONG).show()
+    }
 
     fun preview(video: TgVideo) = viewModelScope.launch {
         if (!container.realMode) {
@@ -131,6 +210,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** TDLib (download progressivo) → servidor HTTP local na LAN → TV. No modo demonstração, só simula. */
     fun castTo(video: TgVideo, device: CastDevice) = viewModelScope.launch {
+        queueDevice = device
+        switchJob?.cancel()
+        val every = _switchEveryMin.value
+        if (every > 0 && _queue.value.isNotEmpty()) {
+            switchJob = viewModelScope.launch { delay(every * 60_000L); playNext(device) }
+        }
         if (!container.realMode) {
             cast.play(device, video, streamUrl = "http://demo.invalid/stream")
             return@launch
@@ -139,8 +224,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             endStream()
             val (url, source) = serve(video)
             streaming = video to url
-            progressJob = launch { while (true) { downloaded.value = source.downloadedFraction; delay(1_000) } }
+            progressJob = viewModelScope.launch { while (true) { downloaded.value = source.downloadedFraction; delay(1_000) } }
             cast.play(device, video, url)
+            Diag.log("vm", "transmitindo file=${video.fileId} (${video.mimeType}, ${video.sizeBytes} B) em ${device.protocol}")
         }.onFailure {
             endStream()
             toast(it)
@@ -156,7 +242,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun togglePause() = viewModelScope.launch { cast.togglePause() }
     fun seekTo(sec: Int) = viewModelScope.launch { cast.seekTo(sec) }
-    fun stop() = viewModelScope.launch { cast.stop(); endStream() }
+    fun stop() = viewModelScope.launch {
+        switchJob?.cancel()
+        queueDevice = null // parar à mão não puxa o próximo da fila
+        cast.stop()
+        endStream()
+    }
 
     override fun onCleared() {
         server?.stop()

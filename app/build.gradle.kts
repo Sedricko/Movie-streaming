@@ -74,6 +74,7 @@ dependencies {
     implementation(libs.androidx.mediarouter)
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.ui)
+    implementation(libs.play.services.auth)
     debugImplementation(libs.compose.ui.tooling)
 
     testImplementation(libs.junit)

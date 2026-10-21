@@ -54,6 +54,7 @@ class FakeCastGateway : CastGateway {
                 _playback.update { s ->
                     if (s.status != PlayStatus.Playing) s
                     else s.copy(
+                        status = if (s.positionSec + 1 >= video.durationSec) PlayStatus.Ended else s.status,
                         positionSec = (s.positionSec + 1).coerceAtMost(video.durationSec),
                         downloadedFraction = (s.downloadedFraction + 0.004f).coerceAtMost(1f),
                     )
