@@ -10,8 +10,22 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.KeyboardArrowDown
-import androidx.compose.material.icons.rounded.KeyboardArrowUp
+import androidx.compose.material.icons.rounded.DragIndicator
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.layout.height
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.zIndex
+import kotlin.math.roundToInt
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -45,6 +59,8 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
+private val ROW_HEIGHT = 64.dp
+private val ROW_GAP = 12.dp
 private val SWITCH_OPTIONS = listOf(0 to "Ao terminar", 5 to "5 min", 10 to "10 min", 30 to "30 min")
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -65,12 +81,16 @@ fun QueueScreen(
     modifier: Modifier = Modifier,
 ) {
     var startAt by remember { mutableStateOf<Long?>(null) }
+    var dragIndex by remember { mutableStateOf<Int?>(null) }
+    var dragOffset by remember { mutableFloatStateOf(0f) }
+    val rowPx = with(LocalDensity.current) { (ROW_HEIGHT + ROW_GAP).toPx() } // distância entre linhas = altura + espaço da Column
+    val haptics = LocalHapticFeedback.current
     var picking by remember { mutableStateOf(false) }
     val hhmm = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
 
     Column(
         modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(ROW_GAP),
     ) {
         TrimSettings(trimStart, trimEnd, onTrim)
 
@@ -79,14 +99,53 @@ fun QueueScreen(
             Text("Toque em um vídeo na Biblioteca e escolha “Adicionar à fila”.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             return@Column
         }
+        Text("Segure um vídeo e arraste para mudar a ordem.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        // Sem key(): cada linha é uma posição fixa; o gesto continua na linha onde o dedo começou
+        // e o deslocamento é aplicado à posição para onde o vídeo já foi movido (dragIndex).
         queue.forEachIndexed { i, video ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
+            val dragging = dragIndex == i
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .height(ROW_HEIGHT)
+                    .zIndex(if (dragging) 1f else 0f)
+                    .graphicsLayer { translationY = if (dragging) dragOffset else 0f }
+                    .background(if (dragging) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent, MaterialTheme.shapes.medium)
+                    .pointerInput(i, queue.size) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = {
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                dragIndex = i
+                                dragOffset = 0f
+                            },
+                            onDrag = { change, amount ->
+                                change.consume()
+                                val from = dragIndex ?: return@detectDragGesturesAfterLongPress
+                                dragOffset += amount.y
+                                val to = (from + (dragOffset / rowPx).roundToInt()).coerceIn(0, queue.lastIndex)
+                                if (to != from) {
+                                    onMove(from, to - from)
+                                    dragOffset -= (to - from) * rowPx
+                                    dragIndex = to
+                                }
+                            },
+                            onDragEnd = { dragIndex = null; dragOffset = 0f },
+                            onDragCancel = { dragIndex = null; dragOffset = 0f },
+                        )
+                    }
+                    .semantics {
+                        customActions = listOfNotNull(
+                            CustomAccessibilityAction("Subir") { onMove(i, -1); true }.takeIf { i > 0 },
+                            CustomAccessibilityAction("Descer") { onMove(i, 1); true }.takeIf { i < queue.lastIndex },
+                        )
+                    },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Rounded.DragIndicator, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Column(Modifier.weight(1f).padding(start = 8.dp)) {
                     Text("${i + 1}. ${video.title}", style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(formatDuration(video.durationSec), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                IconButton(onClick = { onMove(i, -1) }, enabled = i > 0) { Icon(Icons.Rounded.KeyboardArrowUp, "Subir ${video.title}") }
-                IconButton(onClick = { onMove(i, 1) }, enabled = i < queue.lastIndex) { Icon(Icons.Rounded.KeyboardArrowDown, "Descer ${video.title}") }
                 IconButton(onClick = { onRemove(i) }) { Icon(Icons.Rounded.Close, "Tirar ${video.title} da fila") }
             }
         }
