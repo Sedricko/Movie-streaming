@@ -29,6 +29,8 @@ class FakeTelegramGateway : TelegramGateway {
         _auth.value = if (code.trim() == "2fa") AuthState.WaitPassword else AuthState.Ready("Ana")
     }
 
+    override suspend fun resendCode() = Unit
+
     override suspend fun submitPassword(password: String) {
         _auth.value = AuthState.Loading
         delay(400)

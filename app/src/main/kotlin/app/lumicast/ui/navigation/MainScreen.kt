@@ -54,6 +54,7 @@ fun MainScreen(vm: MainViewModel) {
             state = auth,
             onPhone = vm::submitPhone,
             onCode = vm::submitCode,
+            onResendCode = vm::resendCode,
             onPassword = vm::submitPassword,
         )
         return

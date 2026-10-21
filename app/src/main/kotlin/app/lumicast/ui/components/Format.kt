@@ -24,3 +24,14 @@ fun parseClock(text: String): Int? {
     if (nums.size > 1 && nums.drop(1).any { it >= 60 }) return null
     return nums.fold(0) { acc, n -> acc * 60 + n }
 }
+
+/** Máscara de tempo enquanto digita só números: "130" → "1:30", "1450" → "14:50", "11259" → "1:12:59". */
+fun formatClockDigits(input: String): String {
+    val d = input.filter(Char::isDigit).trimStart('0').take(6)
+    if (d.isEmpty()) return ""
+    val p = d.padStart(3, '0') // pelo menos "m:ss"
+    val sec = p.takeLast(2)
+    val rest = p.dropLast(2)
+    if (rest.length <= 2) return "${rest.toInt()}:$sec"
+    return "${rest.dropLast(2).toInt()}:${rest.takeLast(2)}:$sec"
+}

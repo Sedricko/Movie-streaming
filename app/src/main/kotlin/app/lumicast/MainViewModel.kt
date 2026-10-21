@@ -280,6 +280,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun submitPhone(phone: String) = viewModelScope.launch { telegram.submitPhone(phone) }
     fun submitCode(code: String) = viewModelScope.launch { telegram.submitCode(code) }
+    fun resendCode() = viewModelScope.launch { telegram.resendCode() }
     fun submitPassword(password: String) = viewModelScope.launch { telegram.submitPassword(password) }
     fun logout() = viewModelScope.launch { telegram.logout(); _chats.value = emptyList(); _openChat.value = null }
 

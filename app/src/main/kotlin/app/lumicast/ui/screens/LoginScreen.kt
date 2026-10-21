@@ -18,6 +18,8 @@ import android.app.Activity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -41,8 +43,11 @@ fun LoginScreen(
     state: AuthState,
     onPhone: (String) -> Unit,
     onCode: (String) -> Unit,
+    onResendCode: () -> Unit,
     onPassword: (String) -> Unit,
 ) {
+    // "Mudar número" volta para a tela do telefone; o TDLib aceita outro número mesmo esperando o código.
+    var editingPhone by rememberSaveable { mutableStateOf(false) }
     var phone by rememberSaveable { mutableStateOf("") }
     var code by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
@@ -60,12 +65,12 @@ fun LoginScreen(
         )
         Spacer(Modifier.height(40.dp))
 
-        when (state) {
+        when (val shown = if (editingPhone && state is AuthState.WaitCode) AuthState.WaitPhone else state) {
             AuthState.Loading -> CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
 
             AuthState.WaitPhone, is AuthState.Failed -> {
-                if (state is AuthState.Failed) {
-                    Text(state.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+                if (shown is AuthState.Failed) {
+                    Text(shown.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
                     Spacer(Modifier.height(12.dp))
                 }
                 PhoneNumberHint(alreadyTyped = phone.isNotEmpty()) { phone = it }
@@ -79,7 +84,7 @@ fun LoginScreen(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(16.dp))
-                Button(onClick = { onPhone(phone) }, enabled = phone.length >= 8, modifier = Modifier.fillMaxWidth()) {
+                Button(onClick = { editingPhone = false; onPhone(phone) }, enabled = phone.length >= 8, modifier = Modifier.fillMaxWidth()) {
                     Text("Entrar com o Telegram")
                 }
             }
@@ -102,6 +107,16 @@ fun LoginScreen(
                 Spacer(Modifier.height(16.dp))
                 Button(onClick = { onCode(code) }, enabled = code.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
                     Text("Confirmar código")
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Enviado para ${shown.phone}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    TextButton(onClick = { code = ""; onResendCode() }) { Text("Reenviar código") }
+                    TextButton(onClick = { code = ""; editingPhone = true }) { Text("Mudar número") }
                 }
             }
 

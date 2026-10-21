@@ -21,6 +21,8 @@ interface TelegramGateway {
     val authState: StateFlow<AuthState>
     suspend fun submitPhone(phone: String)
     suspend fun submitCode(code: String)
+    /** Pede ao Telegram para mandar o código de novo (pode chegar por SMS ou ligação). */
+    suspend fun resendCode()
     suspend fun submitPassword(password: String)
     suspend fun logout()
 
