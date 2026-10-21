@@ -29,6 +29,7 @@ import app.lumicast.domain.AuthState
 import app.lumicast.domain.PlayStatus
 import app.lumicast.ui.components.FolderActions
 import app.lumicast.ui.components.MiniPlayer
+import app.lumicast.ui.components.TransferBar
 import app.lumicast.ui.components.PreviewPlayer
 import app.lumicast.ui.components.SettingsSheet
 import androidx.compose.runtime.mutableStateOf
@@ -79,7 +80,7 @@ fun MainScreen(vm: MainViewModel) {
     val folderActions = remember(vm) {
         FolderActions(
             open = vm::showFolder, create = vm::createFolder, addTo = vm::addToFolder, rename = vm::renameFolder,
-            delete = vm::deleteFolder, cancelDownload = vm::cancelDownload, renameVideo = vm::renameVideo,
+            delete = vm::deleteFolder, renameVideo = vm::renameVideo,
             moveVideo = vm::moveVideo, removeVideo = vm::removeFromFolder,
         )
     }
@@ -105,6 +106,8 @@ fun MainScreen(vm: MainViewModel) {
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
             Column {
+                downloadStatus?.let { TransferBar(it, onCancel = vm::cancelDownload) }
+                conversion?.let { TransferBar(it, onCancel = vm::cancelConversion) }
                 if (playback.video != null && route != Tab.Tv.route) {
                     MiniPlayer(playback, onOpen = { go(Tab.Tv) }, onTogglePause = vm::togglePause)
                 }
@@ -181,8 +184,6 @@ fun MainScreen(vm: MainViewModel) {
                     onNext = vm::next,
                     canSkipNext = queue.isNotEmpty() || settings.autoNext,
                     onVolume = vm::setVolume,
-                    conversion = conversion,
-                    onCancelConversion = vm::cancelConversion,
                     onSpeed = vm::setSpeed,
                     queue = queue,
                     scheduledAt = scheduledAt,

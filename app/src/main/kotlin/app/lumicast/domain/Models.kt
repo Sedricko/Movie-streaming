@@ -83,3 +83,6 @@ data class AppSettings(
     /** Se a TV recusar o formato (MKV, HEVC, AC3…), converter para MP4 no celular e transmitir o convertido. */
     val autoConvert: Boolean = true,
 )
+
+/** Um download ou conversão em andamento, para a barra de progresso. [fraction] null = ainda sem porcentagem. */
+data class Transfer(val title: String, val detail: String, val fraction: Float?)

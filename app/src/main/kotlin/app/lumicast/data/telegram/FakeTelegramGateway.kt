@@ -77,4 +77,6 @@ class FakeTelegramGateway : TelegramGateway {
         throw UnsupportedOperationException("Modo demonstração: sem download real.")
 
     override suspend fun releaseLocal(video: TgVideo) = Unit
+
+    override fun downloadedFraction(video: TgVideo): Float = 0f
 }

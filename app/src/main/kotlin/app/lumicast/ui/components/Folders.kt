@@ -39,7 +39,6 @@ class FolderActions(
     val addTo: (folderId: String, List<TgVideo>) -> Unit,
     val rename: (folderId: String, name: String) -> Unit,
     val delete: (folderId: String) -> Unit,
-    val cancelDownload: () -> Unit,
     val renameVideo: (folderId: String, TgVideo, String) -> Unit,
     val moveVideo: (fromId: String, TgVideo, toId: String) -> Unit,
     val removeVideo: (folderId: String, TgVideo) -> Unit,

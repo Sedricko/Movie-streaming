@@ -195,6 +195,12 @@ class TdlibTelegramGateway(context: Context) : TelegramGateway {
         return file.local.path
     }
 
+    override fun downloadedFraction(video: TgVideo): Float {
+        val f = files[video.fileId] ?: return 0f
+        val size = if (f.size > 0) f.size else f.expectedSize
+        return if (f.local.isDownloadingCompleted) 1f else if (size > 0) f.local.downloadedSize.toFloat() / size else 0f
+    }
+
     override suspend fun releaseLocal(video: TgVideo) {
         runCatching { send(TdApi.DeleteFile(video.fileId)) }
     }
