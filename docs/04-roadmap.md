@@ -54,7 +54,7 @@ Marque `[x]` ao concluir. Sempre: build verde + testes + atualizar este arquivo.
       tela Configurações (cada recurso automático liga/desliga).
 
 - [x] Logo novo + tela "conectado" na TV, tema claro/escuro, downloads em segundo plano com notificação,
-      gerenciar espaço (cache/convertidos/limite), legendas .srt/.vtt do chat, várias contas do Telegram.
+      gerenciar espaço (cache/convertidos/limite), várias contas do Telegram.
 
 ## M6 — Expansão (v2)
 - [ ] Roku (ECP), Fire TV (Fling), LG webOS, Samsung/Tizen. Transcodificação/HLS sob demanda.
