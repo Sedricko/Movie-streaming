@@ -63,3 +63,14 @@ data class VideoFolder(
     val name: String,
     val videos: List<TgVideo> = emptyList(),
 )
+
+/** Uma página de vídeos de um chat; [next] = 0 quando acabou. */
+data class VideoPage(val videos: List<TgVideo>, val next: Long)
+
+/** Configurações do usuário: cada recurso automático pode ser desligado. */
+data class AppSettings(
+    /** Ao transmitir de novo, continuar do ponto onde parou. */
+    val resume: Boolean = true,
+    /** Sem fila, ao terminar um vídeo tocar o próximo do mesmo chat/pasta (ordem 1→9). */
+    val autoNext: Boolean = true,
+)

@@ -30,7 +30,8 @@ interface TelegramGateway {
     suspend fun logout()
 
     suspend fun chats(): List<TgChat>
-    suspend fun videos(chatId: Long): List<TgVideo>
+    /** Vídeos do chat em páginas: comece com [fromMessageId] = 0 e siga com [VideoPage.next]. */
+    suspend fun videos(chatId: Long, fromMessageId: Long = 0): VideoPage
 
     /** Inicia o download progressivo e devolve a fonte que o servidor local vai servir. */
     suspend fun openStream(video: TgVideo): StreamSource

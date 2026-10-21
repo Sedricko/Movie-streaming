@@ -6,6 +6,7 @@ import app.lumicast.domain.StreamSource
 import app.lumicast.domain.TelegramGateway
 import app.lumicast.domain.TgChat
 import app.lumicast.domain.TgVideo
+import app.lumicast.domain.VideoPage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -52,7 +53,9 @@ class FakeTelegramGateway : TelegramGateway {
         )
     }
 
-    override suspend fun videos(chatId: Long): List<TgVideo> {
+    override suspend fun videos(chatId: Long, fromMessageId: Long): VideoPage = VideoPage(demoVideos(chatId), 0)
+
+    private suspend fun demoVideos(chatId: Long): List<TgVideo> {
         delay(300)
         val mib = 1024L * 1024L
         return listOf(
