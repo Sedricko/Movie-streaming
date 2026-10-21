@@ -77,6 +77,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _switchEveryMin = MutableStateFlow(0)
     val switchEveryMin: StateFlow<Int> = _switchEveryMin.asStateFlow()
 
+    /** Começar/terminar cada vídeo nesses segundos (ex.: pular abertura e créditos); 0 = desligado. Salvo no aparelho. */
+    private val _trimStart = MutableStateFlow(prefs.getInt("trimStart", 0))
+    val trimStart: StateFlow<Int> = _trimStart.asStateFlow()
+    private val _trimEnd = MutableStateFlow(prefs.getInt("trimEnd", 0))
+    val trimEnd: StateFlow<Int> = _trimEnd.asStateFlow()
+    private var trimmedFileId: Int? = null
+
+    /** Vídeos já tocados, para o botão "Anterior". */
+    private val history = ArrayDeque<TgVideo>()
+
     private var queueDevice: CastDevice? = null
     private var scheduleJob: Job? = null
     private var switchJob: Job? = null
@@ -87,6 +97,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             cast.playback.map { it.status }.distinctUntilChanged().collect { status ->
                 if (status == PlayStatus.Ended) queueDevice?.let(::playNext)
+            }
+        }
+        // Chegou no "Terminar em" → próximo da fila (ou parar, se a fila acabou).
+        viewModelScope.launch {
+            cast.playback.collect { p ->
+                val video = p.video ?: return@collect
+                if (p.status == PlayStatus.Connecting) trimmedFileId = null // vídeo novo começando
+                val end = _trimEnd.value
+                if (end <= 0 || end >= video.durationSec || p.status != PlayStatus.Playing || p.positionSec < end) return@collect
+                if (trimmedFileId == video.fileId) return@collect
+                trimmedFileId = video.fileId
+                if (_queue.value.isNotEmpty()) queueDevice?.let(::playNext) else stop()
             }
         }
     }
@@ -205,6 +227,29 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _queue.value = _queue.value.filterIndexed { i, _ -> i != index }
     }
 
+    fun setTrim(startSec: Int, endSec: Int) {
+        _trimStart.value = startSec
+        _trimEnd.value = endSec
+        prefs.edit().putInt("trimStart", startSec).putInt("trimEnd", endSec).apply()
+    }
+
+    fun next() {
+        (queueDevice ?: cast.playback.value.device)?.let(::playNext)
+    }
+
+    /** Volta para o vídeo anterior; o atual volta para o começo da fila. Sem anterior, recomeça o atual. */
+    fun previous() {
+        val device = queueDevice ?: cast.playback.value.device ?: return
+        val current = cast.playback.value.video
+        val prev = history.removeLastOrNull()
+        if (prev == null) {
+            seekTo(_trimStart.value)
+            return
+        }
+        current?.let { _queue.value = listOf(it) + _queue.value }
+        castTo(prev, device)
+    }
+
     fun setSwitchEvery(minutes: Int) {
         _switchEveryMin.value = minutes
     }
@@ -229,6 +274,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private fun playNext(device: CastDevice) {
         val next = _queue.value.firstOrNull() ?: return
         _queue.value = _queue.value.drop(1)
+        cast.playback.value.video?.let { history.addLast(it) }
         castTo(next, device)
     }
 
@@ -316,7 +362,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** TDLib (download progressivo) → servidor HTTP local na LAN → TV. No modo demonstração, só simula. */
-    fun castTo(video: TgVideo, device: CastDevice) = viewModelScope.launch {
+    fun castTo(original: TgVideo, device: CastDevice) = viewModelScope.launch {
+        val start = _trimStart.value
+        // O "Começar em" usa o mesmo caminho do "retomar de onde parou" (os gateways começam em duração × fração).
+        // +0,5 s porque os gateways truncam: 90 s não pode virar 89.
+        val video = if (start in 1 until original.durationSec) original.copy(resumeFraction = (start + 0.5f) / original.durationSec) else original
         queueDevice = device
         switchJob?.cancel()
         val every = _switchEveryMin.value

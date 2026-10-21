@@ -86,6 +86,8 @@ fun MainScreen(vm: MainViewModel) {
     }
     val scheduledAt by vm.scheduledAt.collectAsStateWithLifecycle()
     val switchEveryMin by vm.switchEveryMin.collectAsStateWithLifecycle()
+    val trimStart by vm.trimStart.collectAsStateWithLifecycle()
+    val trimEnd by vm.trimEnd.collectAsStateWithLifecycle()
 
     previewUrl?.let { PreviewPlayer(it, onDismiss = { vm.endPreview() }) }
 
@@ -159,6 +161,9 @@ fun MainScreen(vm: MainViewModel) {
                     devices = devices,
                     scheduledAt = scheduledAt,
                     switchEveryMin = switchEveryMin,
+                    trimStart = trimStart,
+                    trimEnd = trimEnd,
+                    onTrim = vm::setTrim,
                     onMove = vm::moveInQueue,
                     onRemove = vm::removeFromQueue,
                     onSwitchEvery = vm::setSwitchEvery,
@@ -172,6 +177,9 @@ fun MainScreen(vm: MainViewModel) {
                     onTogglePause = vm::togglePause,
                     onSeek = vm::seekTo,
                     onStop = vm::stop,
+                    onPrevious = vm::previous,
+                    onNext = vm::next,
+                    hasNext = queue.isNotEmpty(),
                 )
             }
         }

@@ -35,8 +35,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.lumicast.domain.CastDevice
 import app.lumicast.domain.TgVideo
-import app.lumicast.ui.components.EmptyState
 import app.lumicast.ui.components.formatDuration
+import app.lumicast.ui.components.parseClock
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.text.input.KeyboardType
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -51,6 +54,9 @@ fun QueueScreen(
     devices: List<CastDevice>,
     scheduledAt: Long?,
     switchEveryMin: Int,
+    trimStart: Int,
+    trimEnd: Int,
+    onTrim: (startSec: Int, endSec: Int) -> Unit,
     onMove: (index: Int, delta: Int) -> Unit,
     onRemove: (Int) -> Unit,
     onSwitchEvery: (Int) -> Unit,
@@ -58,10 +64,6 @@ fun QueueScreen(
     onCancelSchedule: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    if (queue.isEmpty()) {
-        EmptyState("Fila vazia", "Toque em um vídeo na Biblioteca e escolha “Adicionar à fila”.", modifier)
-        return
-    }
     var startAt by remember { mutableStateOf<Long?>(null) }
     var picking by remember { mutableStateOf(false) }
     val hhmm = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
@@ -70,7 +72,13 @@ fun QueueScreen(
         modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        TrimSettings(trimStart, trimEnd, onTrim)
+
         Text("Fila (${queue.size})", style = MaterialTheme.typography.titleLarge)
+        if (queue.isEmpty()) {
+            Text("Toque em um vídeo na Biblioteca e escolha “Adicionar à fila”.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            return@Column
+        }
         queue.forEachIndexed { i, video ->
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -131,4 +139,39 @@ fun QueueScreen(
             text = { TimePicker(state) },
         )
     }
+}
+
+/** "Começar em" / "Terminar em": vale para todos os vídeos transmitidos (ex.: pular abertura e créditos). */
+@Composable
+private fun TrimSettings(trimStart: Int, trimEnd: Int, onTrim: (Int, Int) -> Unit) {
+    var start by remember(trimStart) { mutableStateOf(if (trimStart > 0) formatDuration(trimStart) else "") }
+    var end by remember(trimEnd) { mutableStateOf(if (trimEnd > 0) formatDuration(trimEnd) else "") }
+    val startSec = if (start.isBlank()) 0 else parseClock(start)
+    val endSec = if (end.isBlank()) 0 else parseClock(end)
+    val valid = startSec != null && endSec != null && (endSec == 0 || endSec > startSec)
+    val changed = valid && (startSec != trimStart || endSec != trimEnd)
+
+    Text("Começo e fim de cada vídeo", style = MaterialTheme.typography.titleMedium)
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedTextField(
+            start, { start = it }, Modifier.weight(1f), singleLine = true,
+            label = { Text("Começar em") }, placeholder = { Text("1:30") }, isError = startSec == null,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        )
+        OutlinedTextField(
+            end, { end = it }, Modifier.weight(1f), singleLine = true,
+            label = { Text("Terminar em") }, placeholder = { Text("14:50") }, isError = endSec == null || !valid,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        )
+    }
+    Text(
+        when {
+            !valid -> "Use minutos:segundos (ex.: 1:30). O fim precisa ser depois do começo."
+            trimEnd > 0 -> "Ao chegar no fim, passa para o próximo da fila. Deixe em branco para o vídeo inteiro."
+            else -> "Deixe em branco para o vídeo inteiro."
+        },
+        style = MaterialTheme.typography.bodySmall,
+        color = if (valid) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
+    )
+    if (changed) Button(onClick = { onTrim(startSec!!, endSec!!) }) { Text("Salvar") }
 }

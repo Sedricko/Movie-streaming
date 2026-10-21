@@ -16,6 +16,8 @@ import androidx.compose.material.icons.rounded.Forward10
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Replay10
+import androidx.compose.material.icons.rounded.SkipNext
+import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material.icons.rounded.Smartphone
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.rounded.Tv
@@ -43,6 +45,9 @@ fun NowPlayingScreen(
     onTogglePause: () -> Unit,
     onSeek: (Int) -> Unit,
     onStop: () -> Unit,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    hasNext: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val video = state.video
@@ -111,6 +116,9 @@ fun NowPlayingScreen(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            IconButton(onClick = onPrevious) {
+                Icon(Icons.Rounded.SkipPrevious, contentDescription = "Vídeo anterior")
+            }
             IconButton(onClick = { onSeek((state.positionSec - 10).coerceAtLeast(0)) }) {
                 Icon(Icons.Rounded.Replay10, contentDescription = "Voltar 10 segundos")
             }
@@ -123,6 +131,9 @@ fun NowPlayingScreen(
             }
             IconButton(onClick = { onSeek((state.positionSec + 10).coerceAtMost(video.durationSec)) }) {
                 Icon(Icons.Rounded.Forward10, contentDescription = "Avançar 10 segundos")
+            }
+            IconButton(onClick = onNext, enabled = hasNext) {
+                Icon(Icons.Rounded.SkipNext, contentDescription = "Próximo vídeo da fila")
             }
             IconButton(onClick = onStop) {
                 Icon(Icons.Rounded.Stop, contentDescription = "Parar transmissão")
