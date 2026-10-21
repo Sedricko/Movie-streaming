@@ -31,6 +31,9 @@ interface TelegramGateway {
     suspend fun submitPassword(password: String)
     suspend fun logout()
 
+    /** Fecha o banco do Telegram com segurança (antes de trocar de conta). */
+    suspend fun close() {}
+
     suspend fun chats(): List<TgChat>
     /** Vídeos do chat em páginas: comece com [fromMessageId] = 0 e siga com [VideoPage.next]. */
     suspend fun videos(chatId: Long, fromMessageId: Long = 0): VideoPage

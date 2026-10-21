@@ -17,7 +17,9 @@ import app.lumicast.domain.CastProtocol
 import app.lumicast.domain.srtToVtt
 import app.lumicast.data.stream.RangeStreamServer
 import app.lumicast.data.stream.findLanIPv4
+import app.lumicast.domain.Account
 import app.lumicast.domain.AppSettings
+import app.lumicast.domain.AuthState
 import app.lumicast.domain.CastDevice
 import app.lumicast.domain.NaturalTitleOrder
 import app.lumicast.domain.PlayStatus
@@ -60,7 +62,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val playback = combine(cast.playback, downloaded) { p, f -> if (f == null) p else p.copy(downloadedFraction = f) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, cast.playback.value)
 
-    private val prefs = app.getSharedPreferences("lumicast", 0)
+    private val prefs = container.globalPrefs // configurações, TV, fila: valem para todas as contas
+    private val accountPrefs = container.accountPrefs // fixados, salvos, convertidos: de cada conta
+
+    /** Contas deste celular (a atual sempre aparece). */
+    private val _accounts = MutableStateFlow(loadAccounts())
+    val accounts: StateFlow<List<Account>> = _accounts.asStateFlow()
+    val currentAccountId = container.accountId
+
+    private fun loadAccounts(): List<Account> =
+        (prefs.getStringSet("accounts", emptySet())!! + container.accountId)
+            .sortedBy { it.toIntOrNull() ?: 0 }
+            .map { Account(it, prefs.getString("account.name.$it", "").orEmpty()) }
+
 
     /** A TV escolhida (lembrada entre aberturas). Com uma TV só na rede, ela já vem escolhida. */
     private val _selectedTvId = MutableStateFlow(prefs.getString("tv", null))
@@ -137,11 +151,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun setSpeed(rate: Float) = viewModelScope.launch { runCatching { cast.setSpeed(rate) }.onFailure(::toast) }
 
     /** Quanto de cada vídeo já foi assistido (0..1), por chat:mensagem. Mostrado nas miniaturas e usado para continuar. */
-    private val progressPrefs = app.getSharedPreferences("progress", 0)
+    private val progressPrefs = app.getSharedPreferences(container.accountName("progress"), 0)
     private val _progress = MutableStateFlow(progressPrefs.all.mapNotNull { (k, v) -> (v as? Float)?.let { k to it } }.toMap())
     private fun keyOf(v: TgVideo) = "${v.chatId}:${v.messageId}"
     private fun withProgress(list: List<TgVideo>, p: Map<String, Float>) = list.map { it.copy(resumeFraction = p[keyOf(it)] ?: 0f) }
-    private val _pinned = MutableStateFlow(prefs.getStringSet("pinned", emptySet())!!.mapNotNull { it.toLongOrNull() }.toSet())
+    private val _pinned = MutableStateFlow(accountPrefs.getStringSet("pinned", emptySet())!!.mapNotNull { it.toLongOrNull() }.toSet())
     val pinned: StateFlow<Set<Long>> = _pinned.asStateFlow()
 
     /** URL do vídeo aberto no player do celular (prévia), ou null. */
@@ -191,6 +205,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         cast.startDiscovery()
+        // Guarda o nome de quem entrou, para a lista de contas.
+        viewModelScope.launch {
+            auth.collect { a ->
+                if (a is AuthState.Ready && a.userName.isNotBlank()) {
+                    prefs.edit().putString("account.name.${container.accountId}", a.userName)
+                        .putStringSet("accounts", _accounts.value.map { it.id }.toSet()).apply()
+                    _accounts.value = loadAccounts()
+                }
+            }
+        }
         // Vídeo terminou na TV → próximo da fila na mesma TV.
         viewModelScope.launch {
             cast.playback.map { it.status }.distinctUntilChanged().collect { status ->
@@ -313,7 +337,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     runCatching {
                         val path = withDownloadProgress(video, { f -> _downloadStatus.update { it?.copy(fraction = f) } }) { telegram.download(video) }
                         val uri = withContext(Dispatchers.IO) { saveToDownloads(getApplication(), File(path), name, video.title, video.mimeType) }
-                        prefs.edit().putString(savedKey(video), uri).apply()
+                        accountPrefs.edit().putString(savedKey(video), uri).apply()
                         if (streaming?.first?.fileId != video.fileId && previewing?.first?.fileId != video.fileId) telegram.releaseLocal(video)
                         done++
                     }.onFailure {
@@ -449,6 +473,29 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun submitCode(code: String) = viewModelScope.launch { telegram.submitCode(code) }
     fun resendCode() = viewModelScope.launch { telegram.resendCode() }
     fun submitPassword(password: String) = viewModelScope.launch { telegram.submitPassword(password) }
+    /** Nova conta: abre o app já na tela de login dela. */
+    fun addAccount() {
+        val next = ((_accounts.value.mapNotNull { it.id.toIntOrNull() }.maxOrNull() ?: 0) + 1).toString()
+        switchAccount(next)
+    }
+
+    /** Troca de conta: fecha o Telegram com segurança e reabre o app limpo, já na outra conta. */
+    fun switchAccount(id: String) = viewModelScope.launch {
+        if (id == container.accountId) return@launch
+        container.transfers.cancelAll()
+        runCatching { cast.stop() }
+        prefs.edit()
+            .putString("account", id)
+            .putStringSet("accounts", _accounts.value.map { it.id }.toSet() + id)
+            .commit() // commit: o processo vai reiniciar logo abaixo
+        telegram.close()
+        val app = getApplication<Application>()
+        app.packageManager.getLaunchIntentForPackage(app.packageName)?.let {
+            app.startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+        }
+        Runtime.getRuntime().exit(0) // tudo (Telegram, pastas, progresso) recomeça com os dados da outra conta
+    }
+
     fun logout() = viewModelScope.launch { telegram.logout(); _chats.value = emptyList(); _openChat.value = null }
 
     fun loadChats() = viewModelScope.launch {
@@ -497,9 +544,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Vídeo já salvo na galeria por este app: transmitir do arquivo, sem baixar do Telegram de novo. */
     private fun savedSource(video: TgVideo): StreamSource? {
         convertedSource(video)?.let { return it }
-        val uri = prefs.getString(savedKey(video), null) ?: return null
+        val uri = accountPrefs.getString(savedKey(video), null) ?: return null
         val source = SavedVideoSource.open(getApplication(), uri, video.mimeType)
-        if (source == null) prefs.edit().remove(savedKey(video)).apply() // apagaram da galeria: volta a usar o Telegram
+        if (source == null) accountPrefs.edit().remove(savedKey(video)).apply() // apagaram da galeria: volta a usar o Telegram
         return source
     }
 
@@ -507,9 +554,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Versão MP4 já convertida deste vídeo (o Android pode apagar o cache: aí some e converte de novo se preciso). */
     private fun convertedSource(video: TgVideo): StreamSource? {
-        val uri = prefs.getString(convertedKey(video), null) ?: return null
+        val uri = accountPrefs.getString(convertedKey(video), null) ?: return null
         val source = SavedVideoSource.open(getApplication(), uri, "video/mp4")
-        if (source == null) prefs.edit().remove(convertedKey(video)).apply()
+        if (source == null) accountPrefs.edit().remove(convertedKey(video)).apply()
         return source
     }
 
@@ -540,12 +587,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 try {
                     _conversion.value = Transfer("Baixando para converter", video.title, 0f)
                     TransferService.start(getApplication())
-                    val input = prefs.getString(savedKey(video), null)?.let(Uri::parse)
+                    val input = accountPrefs.getString(savedKey(video), null)?.let(Uri::parse)
                         ?: Uri.fromFile(File(withDownloadProgress(video, { f -> _conversion.update { it?.copy(fraction = f) } }) { telegram.download(video) }))
                     val out = File(getApplication<Application>().cacheDir, "convertidos/${video.chatId}_${video.messageId}.mp4")
                     _conversion.value = Transfer("Convertendo para MP4", video.title, null)
                     converter.toMp4(input, out) { p -> _conversion.value = Transfer("Convertendo para MP4", video.title, p / 100f) }
-                    prefs.edit().putString(convertedKey(video), Uri.fromFile(out).toString()).apply()
+                    accountPrefs.edit().putString(convertedKey(video), Uri.fromFile(out).toString()).apply()
                     Diag.log("convert", "file=${video.fileId} convertido (${out.length()} B)")
                     _conversion.value = null
                     convertJob = null // o castTo abaixo não deve cancelar a si mesmo
@@ -564,7 +611,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun togglePin(chat: TgChat) {
         _pinned.value = if (chat.id in _pinned.value) _pinned.value - chat.id else _pinned.value + chat.id
-        prefs.edit().putStringSet("pinned", _pinned.value.map { it.toString() }.toSet()).apply()
+        accountPrefs.edit().putStringSet("pinned", _pinned.value.map { it.toString() }.toSet()).apply()
     }
 
     suspend fun thumbnail(video: TgVideo): String? = runCatching { telegram.thumbnail(video) }.getOrNull()
@@ -718,7 +765,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             return@launch
         }
         withContext(Dispatchers.IO) { convertedDir.deleteRecursively() }
-        prefs.edit().apply { prefs.all.keys.filter { it.startsWith("conv:") }.forEach(::remove) }.apply()
+        accountPrefs.edit().apply { accountPrefs.all.keys.filter { it.startsWith("conv:") }.forEach(::remove) }.apply()
         refreshStorage()
     }
 

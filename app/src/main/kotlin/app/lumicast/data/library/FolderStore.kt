@@ -10,8 +10,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /** Pastas do usuário, salvas como JSON nas preferências do app. */
-class FolderStore(context: Context) {
-    private val prefs = context.getSharedPreferences("lumicast", 0)
+class FolderStore(context: Context, prefsName: String) {
+    private val prefs = context.getSharedPreferences(prefsName, 0)
     private val _folders = MutableStateFlow(decodeFolders(prefs.getString(KEY, null)))
     val folders: StateFlow<List<VideoFolder>> = _folders.asStateFlow()
 

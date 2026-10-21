@@ -34,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import app.lumicast.domain.Account
 import app.lumicast.domain.AuthState
 import app.lumicast.ui.theme.LumiTheme
 
@@ -45,6 +46,9 @@ fun LoginScreen(
     onCode: (String) -> Unit,
     onResendCode: () -> Unit,
     onPassword: (String) -> Unit,
+    /** Outras contas já usadas neste celular: dá para voltar a elas sem entrar nesta. */
+    otherAccounts: List<Account> = emptyList(),
+    onSwitchAccount: (String) -> Unit = {},
 ) {
     // "Mudar número" volta para a tela do telefone; o TDLib aceita outro número mesmo esperando o código.
     var editingPhone by rememberSaveable { mutableStateOf(false) }
@@ -139,6 +143,10 @@ fun LoginScreen(
             }
 
             is AuthState.Ready -> Unit
+        }
+        otherAccounts.filter { it.name.isNotBlank() }.forEach { a ->
+            Spacer(Modifier.height(8.dp))
+            TextButton(onClick = { onSwitchAccount(a.id) }) { Text("Voltar para a conta de ${a.name}") }
         }
     }
 }

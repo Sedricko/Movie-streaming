@@ -98,3 +98,6 @@ enum class ThemeMode { System, Light, Dark }
 
 /** Um download ou conversão em andamento, para a barra de progresso. [fraction] null = ainda sem porcentagem. */
 data class Transfer(val title: String, val detail: String, val fraction: Float?)
+
+/** Uma conta do Telegram neste celular. [name] vazio = ainda sem login. */
+data class Account(val id: String, val name: String)
