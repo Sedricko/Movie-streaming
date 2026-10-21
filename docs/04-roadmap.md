@@ -23,6 +23,8 @@ Marque `[x]` ao concluir. Sempre: build verde + testes + atualizar este arquivo.
 - **Aceite:** entrar com conta real, listar vídeos de um canal, tocar prévia local (Media3) enquanto baixa.
 
 ## M3 — Cast para a TV (Google Cast)
+- [x] `GoogleCastGateway` (descoberta via MediaRouter, sessão, `load`/pausar/seek/parar) ligado a TDLib → `RangeStreamServer` no `MainViewModel`.
+- [x] Notificação de mídia do SDK do Cast (serviço em primeiro plano do próprio SDK). **Nada disso testado em TV real ainda.**
 - [ ] `GoogleCastGateway`: descoberta (`MediaRouter`), sessão, `RemoteMediaClient.load` com URL do servidor local.
 - [ ] Serviço em primeiro plano: servidor + TDLib vivos com tela bloqueada; notificação de mídia com controles.
 - [ ] Seek na TV → repriorizar download.

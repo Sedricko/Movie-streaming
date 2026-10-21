@@ -70,6 +70,8 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.server.cio)
+    implementation(libs.cast.framework)
+    implementation(libs.androidx.mediarouter)
     debugImplementation(libs.compose.ui.tooling)
 
     testImplementation(libs.junit)
