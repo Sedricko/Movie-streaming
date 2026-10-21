@@ -1,3 +1,4 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.util.Properties
 
 plugins {
@@ -13,12 +14,12 @@ val localProps = Properties().apply {
 
 android {
     namespace = "app.lumicast"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "app.lumicast"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
         // Segredos do Telegram: nunca versionar. Defina em local.properties.
@@ -37,14 +38,22 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "17" }
     buildFeatures {
         compose = true
         buildConfig = true
     }
+    sourceSets["main"].apply {
+        // TDLib compilado por scripts/build-tdlib.sh (o CI faz isso e guarda em cache).
+        java.srcDir(rootProject.file("tdlib/java"))
+        jniLibs.srcDir(rootProject.file("tdlib/libs"))
+    }
     packaging {
         resources.excludes += setOf("/META-INF/{AL2.0,LGPL2.1}", "META-INF/INDEX.LIST", "META-INF/io.netty.versions.properties")
     }
+}
+
+kotlin {
+    compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
 }
 
 dependencies {

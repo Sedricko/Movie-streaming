@@ -2,9 +2,9 @@
 
 Marque `[x]` ao concluir. Sempre: build verde + testes + atualizar este arquivo.
 
-## M0 — Esqueleto ✅ (escrito, **não compilado**)
+## M0 — Esqueleto ✅
 - [x] Projeto Gradle, tema, 4 telas em modo demonstração, `RangeParser`/`RangeStreamServer`, interfaces de domínio.
-- [ ] **Compilar** (`assembleDebug`) e rodar `RangeParserTest` — primeira tarefa do Claude Code.
+- [x] Compilar (`assembleDebug`) e rodar os testes — verde no GitHub Actions (`.github/workflows/android.yml`).
 
 ## M1 — Fundação
 - [ ] Hilt, DataStore (preferências, última TV), navegação final, estados de UI (`Loading/Empty/Error`).
@@ -13,6 +13,8 @@ Marque `[x]` ao concluir. Sempre: build verde + testes + atualizar este arquivo.
 - **Aceite:** app abre no demo sem crash; telas fiéis ao design system; `./gradlew test` verde.
 
 ## M2 — Telegram real (TDLib)
+- [x] TDLib oficial (JNI) compilado por `scripts/build-tdlib.sh` (commit fixado no workflow, cache no CI).
+- [x] `TdlibTelegramGateway` escrito e compilando (login, chats, vídeos, `openStream`). **Não testado com conta real.**
 - [ ] Integrar TDLib 1.8.x (JNI) — preferir **build oficial** (`td/example/android`) empacotado como módulo `:tdlib`,
       ou artefato Maven confiável (validar licença Boost e origem).
 - [ ] `TdlibTelegramGateway`: estados de login (telefone → código → senha 2FA), `getChats`, pastas, `searchChatMessages`

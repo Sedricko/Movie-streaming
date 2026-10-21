@@ -1,0 +1,61 @@
+name: Android
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  # Commit do TDLib usado no app. Mudar aqui força recompilar o TDLib (o resultado fica em cache).
+  TD_REF: 0e88653dcbf4e44c73cb655a05b58cd749a91169
+
+jobs:
+  tdlib:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - id: cache
+        uses: actions/cache@v4
+        with:
+          path: tdlib
+          key: tdlib-android-${{ env.TD_REF }}-v1
+      - if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      - if: steps.cache.outputs.cache-hit != 'true'
+        run: sudo apt-get update && sudo apt-get install -y gperf php-cli
+      - if: steps.cache.outputs.cache-hit != 'true'
+        run: scripts/build-tdlib.sh "$TD_REF"
+      - run: cat tdlib/COMMIT && find tdlib -name '*.so' | xargs ls -la
+      - uses: actions/upload-artifact@v4
+        with: { name: tdlib, path: tdlib, retention-days: 7 }
+
+  app:
+    needs: tdlib
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: tdlib, path: tdlib }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Versões estáveis mais recentes (referência)
+        continue-on-error: true
+        run: |
+          g() { curl -s "https://dl.google.com/dl/android/maven2/$1/maven-metadata.xml" | grep -o '<version>[^<]*' | sed 's/<version>//' | grep -viE 'alpha|beta|rc|dev' | tail -3 | tr '\n' ' '; echo "<- $1"; }
+          g com/android/tools/build/gradle; g androidx/compose/compose-bom; g androidx/activity/activity-compose
+          g androidx/navigation/navigation-compose; g androidx/lifecycle/lifecycle-runtime-compose; g androidx/core/core-ktx
+          g com/google/android/gms/play-services-cast-framework; g androidx/media3/media3-exoplayer
+          g com/google/dagger/hilt-android; g androidx/datastore/datastore-preferences
+          ls "$ANDROID_HOME/platforms" "$ANDROID_HOME/build-tools"
+      - name: local.properties
+        run: |
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          echo "TELEGRAM_API_ID=${{ secrets.TELEGRAM_API_ID || '0' }}" >> local.properties
+          echo "TELEGRAM_API_HASH=${{ secrets.TELEGRAM_API_HASH }}" >> local.properties
+      - run: ./gradlew --no-daemon assembleDebug testDebugUnitTest
+      - uses: actions/upload-artifact@v4
+        with: { name: lumicast-debug-apk, path: app/build/outputs/apk/debug/*.apk }
