@@ -81,6 +81,8 @@ fun QueueScreen(
     onSwitchEvery: (Int) -> Unit,
     onStart: (CastDevice, atMillis: Long?) -> Unit,
     onCancelSchedule: () -> Unit,
+    onDownloadQueue: () -> Unit,
+    onClearQueue: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var startAt by remember { mutableStateOf<Long?>(null) }
@@ -97,7 +99,13 @@ fun QueueScreen(
     ) {
         TrimSettings(trimStart, trimEnd, onTrim)
 
-        Text("Fila (${queue.size})", style = MaterialTheme.typography.titleLarge)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("Fila (${queue.size})", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+            if (queue.isNotEmpty()) {
+                TextButton(onClick = onDownloadQueue) { Text("Baixar tudo") }
+                TextButton(onClick = onClearQueue) { Text("Limpar") }
+            }
+        }
         if (queue.isEmpty()) {
             Text("Toque em um vídeo na Biblioteca e escolha “Adicionar à fila”.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             return@Column

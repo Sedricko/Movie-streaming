@@ -5,6 +5,7 @@ import android.content.Intent
 import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import app.lumicast.data.library.SavedVideoSource
 import app.lumicast.data.library.saveToDownloads
 import app.lumicast.data.stream.RangeStreamServer
 import app.lumicast.data.stream.findLanIPv4
@@ -53,6 +54,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _previewUrl = MutableStateFlow<String?>(null)
     val previewUrl: StateFlow<String?> = _previewUrl.asStateFlow()
     private var previewing: Pair<TgVideo, String>? = null
+    private var previewSource: StreamSource? = null
 
     private val _chats = MutableStateFlow<List<TgChat>>(emptyList())
     val chats: StateFlow<List<TgChat>> = _chats.asStateFlow()
@@ -131,12 +133,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         container.folders.update { fs -> fs.mapNotNull { if (it.id == id) change(it) else it } }
 
     /** Cria a pasta (e já põe [video] nela, se veio de um vídeo). */
-    fun createFolder(name: String, video: TgVideo?) =
-        container.folders.update { it + VideoFolder(UUID.randomUUID().toString(), name.trim(), listOfNotNull(video)) }
+    fun createFolder(name: String, videos: List<TgVideo>) =
+        container.folders.update { it + VideoFolder(UUID.randomUUID().toString(), name.trim(), videos.distinctBy { v -> v.fileId }) }
 
-    fun addToFolder(folderId: String, video: TgVideo) {
-        editFolder(folderId) { f -> if (f.videos.any { it.fileId == video.fileId }) f else f.copy(videos = f.videos + video) }
-        Toast.makeText(getApplication(), "Adicionado à pasta.", Toast.LENGTH_SHORT).show()
+    fun addToFolder(folderId: String, videos: List<TgVideo>) {
+        editFolder(folderId) { f -> f.copy(videos = (f.videos + videos).distinctBy { it.fileId }) }
+        Toast.makeText(getApplication(), if (videos.size == 1) "Adicionado à pasta." else "${videos.size} vídeos adicionados à pasta.", Toast.LENGTH_SHORT).show()
     }
 
     fun renameFolder(folderId: String, name: String) = editFolder(folderId) { it.copy(name = name.trim()) }
@@ -155,7 +157,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun moveVideo(fromId: String, video: TgVideo, toId: String) {
         if (fromId == toId) return
         removeFromFolder(fromId, video)
-        addToFolder(toId, video)
+        addToFolder(toId, listOf(video))
     }
 
     private var downloadJob: Job? = null
@@ -187,9 +189,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 videos.forEachIndexed { i, video ->
                     current = video
                     _downloadStatus.value = "Baixando ${i + 1} de ${videos.size}: ${video.title}"
+                    savedSource(video)?.let {
+                        it.close()
+                        done++
+                        return@forEachIndexed // já está na galeria: não baixar de novo
+                    }
                     runCatching {
                         val path = telegram.download(video)
-                        withContext(Dispatchers.IO) { saveToDownloads(getApplication(), File(path), name, video.title, video.mimeType) }
+                        val uri = withContext(Dispatchers.IO) { saveToDownloads(getApplication(), File(path), name, video.title, video.mimeType) }
+                        prefs.edit().putString(savedKey(video), uri).apply()
                         if (streaming?.first?.fileId != video.fileId && previewing?.first?.fileId != video.fileId) telegram.releaseLocal(video)
                         done++
                     }.onFailure {
@@ -210,10 +218,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun enqueue(video: TgVideo) {
-        _queue.value += video
-        Toast.makeText(getApplication(), "Adicionado à fila (${_queue.value.size}).", Toast.LENGTH_SHORT).show()
+    fun enqueue(video: TgVideo) = enqueueAll(listOf(video))
+
+    fun enqueueAll(videos: List<TgVideo>) {
+        _queue.value += videos
+        val what = if (videos.size == 1) "Adicionado" else "${videos.size} vídeos adicionados"
+        Toast.makeText(getApplication(), "$what à fila (${_queue.value.size} no total).", Toast.LENGTH_SHORT).show()
     }
+
+    fun clearQueue() {
+        _queue.value = emptyList()
+    }
+
+    fun downloadQueue() = downloadAll("Fila", _queue.value)
+
+    /** Baixa os vídeos selecionados na Biblioteca para a pasta do chat/pasta aberta. */
+    fun downloadVideos(videos: List<TgVideo>) =
+        downloadAll(openFolder.value?.name ?: _openChat.value?.title ?: "Lumicast", videos)
 
     fun moveInQueue(index: Int, delta: Int) {
         val list = _queue.value.toMutableList()
@@ -308,7 +329,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private var server: RangeStreamServer? = null
     private var streaming: Pair<TgVideo, String>? = null
+    private var streamSource: StreamSource? = null
     private var progressJob: Job? = null
+
+    private fun savedKey(video: TgVideo) = "saved:${video.chatId}:${video.messageId}"
+
+    /** Vídeo já salvo na galeria por este app: transmitir do arquivo, sem baixar do Telegram de novo. */
+    private fun savedSource(video: TgVideo): StreamSource? {
+        val uri = prefs.getString(savedKey(video), null) ?: return null
+        val source = SavedVideoSource.open(getApplication(), uri, video.mimeType)
+        if (source == null) prefs.edit().remove(savedKey(video)).apply() // apagaram da galeria: volta a usar o Telegram
+        return source
+    }
 
     fun togglePin(chat: TgChat) {
         _pinned.value = if (chat.id in _pinned.value) _pinned.value - chat.id else _pinned.value + chat.id
@@ -323,7 +355,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val ip = findLanIPv4(getApplication()) ?: error("Sem Wi-Fi. Conecte o celular à mesma rede da TV.")
             RangeStreamServer(ip).also { it.start(); server = it }
         }
-        val source = telegram.openStream(video)
+        val source = savedSource(video)?.also { Diag.log("vm", "file=${video.fileId}: usando a cópia salva no celular") }
+            ?: telegram.openStream(video)
         return srv.register(source) to source
     }
 
@@ -347,8 +380,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         runCatching {
             endPreview()
-            val (url, _) = serve(video)
+            val (url, source) = serve(video)
             previewing = video to url
+            previewSource = source
             _previewUrl.value = url
         }.onFailure(::toast)
     }
@@ -358,6 +392,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             server?.unregister(url)
             if (streaming?.first?.fileId != video.fileId) telegram.closeStream(video) // a TV pode estar usando o mesmo arquivo
         }
+        previewSource?.close()
+        previewSource = null
         previewing = null
         _previewUrl.value = null
     }
@@ -382,6 +418,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             endStream()
             val (url, source) = serve(video)
             streaming = video to url
+            streamSource = source
             progressJob = viewModelScope.launch { while (true) { downloaded.value = source.downloadedFraction; delay(1_000) } }
             cast.play(device, video, url)
             Diag.log("vm", "transmitindo file=${video.fileId} (${video.mimeType}, ${video.sizeBytes} B) em ${device.protocol}")
@@ -395,6 +432,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         progressJob?.cancel()
         downloaded.value = null
         streaming?.let { (video, url) -> server?.unregister(url); telegram.closeStream(video) }
+        streamSource?.close()
+        streamSource = null
         streaming = null
     }
 

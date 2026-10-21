@@ -11,7 +11,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Logout
+import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.CreateNewFolder
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.RemoveCircleOutline
+import androidx.compose.material.icons.rounded.SelectAll
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Search
@@ -65,6 +70,8 @@ fun LibraryScreen(
     loadThumbnail: suspend (TgVideo) -> String?,
     onPreview: (TgVideo) -> Unit,
     onEnqueue: (TgVideo) -> Unit,
+    onEnqueueAll: (List<TgVideo>) -> Unit,
+    onDownloadVideos: (List<TgVideo>) -> Unit,
     onOpenChat: (TgChat) -> Unit,
     onBack: () -> Unit,
     onLogout: () -> Unit,
@@ -80,9 +87,15 @@ fun LibraryScreen(
     var query by remember { mutableStateOf("") }
     var pending by remember { mutableStateOf<TgVideo?>(null) }
     // Diálogos de pasta: o vídeo em questão (ou null quando é a pasta aberta / pasta nova vazia).
-    var newFolderFor by remember { mutableStateOf<TgVideo?>(null) }
+    var newFolderFor by remember { mutableStateOf<List<TgVideo>>(emptyList()) }
     var askNewFolder by remember { mutableStateOf(false) }
-    var addingToFolder by remember { mutableStateOf<TgVideo?>(null) }
+    var addingToFolder by remember { mutableStateOf<List<TgVideo>?>(null) }
+    // Seleção de vários vídeos (toque longo); some ao trocar de chat/pasta.
+    var selected by remember(openChat?.id, openFolder?.id) { mutableStateOf(setOf<String>()) }
+    fun keyOf(v: TgVideo) = "${v.chatId}:${v.messageId}"
+    fun toggle(v: TgVideo) { selected = if (keyOf(v) in selected) selected - keyOf(v) else selected + keyOf(v) }
+    val listVideos = openFolder?.videos ?: videos
+    val selectedVideos = listVideos.filter { keyOf(it) in selected }
     var moving by remember { mutableStateOf<TgVideo?>(null) }
     var renamingVideo by remember { mutableStateOf<TgVideo?>(null) }
     var renamingFolder by remember { mutableStateOf(false) }
@@ -143,7 +156,27 @@ fun LibraryScreen(
             }
         }
 
-        OutlinedTextField(
+        if (selected.isNotEmpty()) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { selected = emptySet() }) { Icon(Icons.Rounded.Close, "Cancelar seleção") }
+                Text("${selected.size} selecionados", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                IconButton(onClick = { selected = listVideos.map(::keyOf).toSet() }) { Icon(Icons.Rounded.SelectAll, "Selecionar todos") }
+                IconButton(onClick = { onEnqueueAll(selectedVideos); selected = emptySet() }) {
+                    Icon(Icons.AutoMirrored.Rounded.PlaylistAdd, "Adicionar selecionados à fila")
+                }
+                IconButton(onClick = { addingToFolder = selectedVideos; selected = emptySet() }) {
+                    Icon(Icons.Rounded.CreateNewFolder, "Adicionar selecionados a uma pasta")
+                }
+                IconButton(onClick = { onDownloadVideos(selectedVideos); selected = emptySet() }, enabled = downloadStatus == null) {
+                    Icon(Icons.Rounded.Download, "Baixar selecionados, um por vez")
+                }
+                if (openFolder != null) {
+                    IconButton(onClick = { selectedVideos.forEach { folderActions.removeVideo(openFolder.id, it) }; selected = emptySet() }) {
+                        Icon(Icons.Rounded.RemoveCircleOutline, "Tirar selecionados da pasta")
+                    }
+                }
+            }
+        } else OutlinedTextField(
             value = query,
             onValueChange = { query = it },
             leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
@@ -170,7 +203,7 @@ fun LibraryScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text("Minhas pastas", style = MaterialTheme.typography.titleMedium)
-                        TextButton(onClick = { newFolderFor = null; askNewFolder = true }) { Text("Nova pasta") }
+                        TextButton(onClick = { newFolderFor = emptyList(); askNewFolder = true }) { Text("Nova pasta") }
                     }
                 }
                 items(shownFolders, key = { "f" + it.id }) { FolderRow(it, onClick = { folderActions.open(it) }) }
@@ -192,7 +225,13 @@ fun LibraryScreen(
                     if (openFolder != null) "Toque num vídeo de um chat e escolha “Adicionar à pasta”." else "Envie um vídeo pelo Telegram e ele aparece aqui.",
                 )
             } else {
-                LazyColumn { items(shown, key = { "${it.chatId}:${it.messageId}" }) { VideoRow(it, loadThumbnail, onClick = { pending = it }) } }
+                LazyColumn { items(shown, key = { "${it.chatId}:${it.messageId}" }) { VideoRow(
+                            it,
+                            loadThumbnail,
+                            onClick = { if (selected.isNotEmpty()) toggle(it) else pending = it },
+                            selected = keyOf(it) in selected,
+                            onLongClick = { toggle(it) },
+                        ) } }
             }
         }
     }
@@ -210,7 +249,7 @@ fun LibraryScreen(
                     }
                 }
                 if (openFolder == null) {
-                    OutlinedButton(onClick = { addingToFolder = video; pending = null }, modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(onClick = { addingToFolder = listOf(video); pending = null }, modifier = Modifier.fillMaxWidth()) {
                         Text("Adicionar à pasta")
                     }
                 } else {
@@ -245,13 +284,13 @@ fun LibraryScreen(
         }
     }
 
-    addingToFolder?.let { video ->
+    addingToFolder?.let { list ->
         FolderPickerDialog(
             title = "Adicionar à pasta",
             folders = folders,
             excludeId = null,
-            onPick = { folderActions.addTo(it.id, video) },
-            onNew = { newFolderFor = video; askNewFolder = true; addingToFolder = null },
+            onPick = { folderActions.addTo(it.id, list) },
+            onNew = { newFolderFor = list; askNewFolder = true; addingToFolder = null },
             onDismiss = { addingToFolder = null },
         )
     }
@@ -261,7 +300,7 @@ fun LibraryScreen(
             folders = folders,
             excludeId = openFolder.id,
             onPick = { folderActions.moveVideo(openFolder.id, video, it.id) },
-            onNew = { newFolderFor = video; askNewFolder = true; folderActions.removeVideo(openFolder.id, video); moving = null },
+            onNew = { newFolderFor = listOf(video); askNewFolder = true; folderActions.removeVideo(openFolder.id, video); moving = null },
             onDismiss = { moving = null },
         )
     }
