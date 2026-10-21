@@ -1,8 +1,11 @@
 package app.lumicast
 
 import android.app.Application
+import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import app.lumicast.data.stream.RangeStreamServer
+import app.lumicast.data.stream.findLanIPv4
 import app.lumicast.domain.CastDevice
 import app.lumicast.domain.TgChat
 import app.lumicast.domain.TgVideo
@@ -61,15 +64,41 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun rescan() = cast.startDiscovery()
 
-    /**
-     * M3: aqui entram openStream() → RangeStreamServer.register() → cast.play(url real).
-     * No modo demonstração, só simula.
-     */
+    private var server: RangeStreamServer? = null
+    private var streaming: Pair<TgVideo, String>? = null
+
+    /** TDLib (download progressivo) → servidor HTTP local na LAN → TV. No modo demonstração, só simula. */
     fun castTo(video: TgVideo, device: CastDevice) = viewModelScope.launch {
-        cast.play(device, video, streamUrl = "http://demo.invalid/stream")
+        if (!container.realMode) {
+            cast.play(device, video, streamUrl = "http://demo.invalid/stream")
+            return@launch
+        }
+        runCatching {
+            endStream()
+            val srv = server ?: run {
+                val ip = findLanIPv4(getApplication()) ?: error("Sem Wi-Fi. Conecte o celular à mesma rede da TV.")
+                RangeStreamServer(ip).also { it.start(); server = it }
+            }
+            val url = srv.register(telegram.openStream(video))
+            streaming = video to url
+            cast.play(device, video, url)
+        }.onFailure {
+            endStream()
+            Toast.makeText(getApplication(), it.message ?: "Não foi possível transmitir. Tente de novo.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private suspend fun endStream() {
+        streaming?.let { (video, url) -> server?.unregister(url); telegram.closeStream(video) }
+        streaming = null
     }
 
     fun togglePause() = viewModelScope.launch { cast.togglePause() }
     fun seekTo(sec: Int) = viewModelScope.launch { cast.seekTo(sec) }
-    fun stop() = viewModelScope.launch { cast.stop() }
+    fun stop() = viewModelScope.launch { cast.stop(); endStream() }
+
+    override fun onCleared() {
+        server?.stop()
+        cast.stopDiscovery()
+    }
 }
