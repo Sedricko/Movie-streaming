@@ -29,6 +29,10 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
+/** O download ativo em [downloadOffset] (com [prefix] bytes prontos) vai chegar a [offset] sem reiniciar? */
+internal fun downloadReaches(offset: Long, active: Boolean, downloadOffset: Long, prefix: Long, window: Long = 16L * 1024 * 1024) =
+    active && offset >= downloadOffset && offset - (downloadOffset + prefix) < window
+
 class TdException(val error: TdApi.Error) : Exception(error.message)
 
 /** Telegram real via TDLib (interface Java/JNI oficial). Veja docs/06-especificacao-tecnica.md. */
@@ -168,6 +172,7 @@ class TdlibTelegramGateway(context: Context) : TelegramGateway {
                 durationSec = v.duration,
                 sizeBytes = if (v.video.size > 0) v.video.size else v.video.expectedSize,
                 mimeType = v.mimeType.ifBlank { "video/mp4" },
+                thumbnailFileId = v.thumbnail?.file?.id,
             )
         }
     }
@@ -175,6 +180,12 @@ class TdlibTelegramGateway(context: Context) : TelegramGateway {
     override suspend fun openStream(video: TgVideo): StreamSource {
         send(TdApi.DownloadFile(video.fileId, STREAM_PRIORITY, 0, 0, false))
         return TdlibStreamSource(video.fileId, video.sizeBytes, video.mimeType)
+    }
+
+    override suspend fun thumbnail(video: TgVideo): String? {
+        val id = video.thumbnailFileId ?: return null
+        val file = runCatching { send(TdApi.DownloadFile(id, 1, 0, 0, true)) as TdApi.File }.getOrNull()
+        return file?.local?.path?.takeIf { file.local.isDownloadingCompleted }
     }
 
     override suspend fun closeStream(video: TgVideo) {
@@ -187,7 +198,17 @@ class TdlibTelegramGateway(context: Context) : TelegramGateway {
         override val sizeBytes: Long,
         override val mimeType: String,
     ) : StreamSource {
-        @Volatile private var requestedOffset = 0L
+        override val downloadedFraction: Float
+            get() = files[fileId]?.let { f -> if (sizeBytes > 0) f.local.downloadedSize.toFloat() / sizeBytes else 0f } ?: 0f
+
+        /**
+         * O download atual chega logo a [offset]? Reiniciar o download a cada leitura além do trecho baixado
+         * (o que a TV faz o tempo todo) zera o progresso e trava a reprodução; só pulamos em seek de verdade.
+         */
+        private fun downloadReaches(offset: Long): Boolean {
+            val local = files[fileId]?.local ?: return false
+            return downloadReaches(offset, local.isDownloadingActive, local.downloadOffset, local.downloadedPrefixSize)
+        }
 
         override suspend fun read(offset: Long, buffer: ByteArray, length: Int): Int {
             if (offset >= sizeBytes || length <= 0) return -1
@@ -201,8 +222,7 @@ class TdlibTelegramGateway(context: Context) : TelegramGateway {
                             RandomAccessFile(path, "r").use { it.seek(offset); it.read(buffer, 0, n) }
                         }
                     }
-                    if (offset != requestedOffset) {
-                        requestedOffset = offset
+                    if (!downloadReaches(offset)) {
                         runCatching { send(TdApi.DownloadFile(fileId, STREAM_PRIORITY, offset, 0, false)) }
                     }
                     withTimeoutOrNull(500) { fileUpdates.first { it == fileId } }
