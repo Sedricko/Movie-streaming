@@ -10,15 +10,18 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.automirrored.rounded.Logout
 import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.CreateNewFolder
-import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import app.lumicast.ui.components.TvPicker
 import androidx.compose.material.icons.rounded.RemoveCircleOutline
 import androidx.compose.material.icons.rounded.SelectAll
 import androidx.compose.material.icons.rounded.Download
-import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
@@ -49,7 +52,6 @@ import app.lumicast.domain.TgChat
 import app.lumicast.domain.TgVideo
 import app.lumicast.ui.components.BeamButton
 import app.lumicast.ui.components.ChatRow
-import app.lumicast.ui.components.DeviceRow
 import app.lumicast.ui.components.EmptyState
 import app.lumicast.ui.components.VideoRow
 
@@ -65,6 +67,10 @@ fun LibraryScreen(
     downloadStatus: String?,
     folderActions: FolderActions,
     devices: List<CastDevice>,
+    tv: CastDevice?,
+    onPickTv: (CastDevice) -> Unit,
+    onRescan: () -> Unit,
+    onShareDiagnostics: () -> Unit,
     pinned: Set<Long>,
     onTogglePin: (TgChat) -> Unit,
     loadThumbnail: suspend (TgVideo) -> String?,
@@ -100,6 +106,8 @@ fun LibraryScreen(
     var renamingVideo by remember { mutableStateOf<TgVideo?>(null) }
     var renamingFolder by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var menuOpen by remember { mutableStateOf(false) }
+    var choosingTvFor by remember { mutableStateOf(false) } // "Outra TV" na folha do vídeo
 
     Column(modifier.fillMaxSize()) {
         Row(
@@ -114,20 +122,16 @@ fun LibraryScreen(
                     }
                     Text(openFolder.name, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                IconButton(onClick = { renamingFolder = true }) { Icon(Icons.Rounded.Edit, "Renomear pasta") }
-                IconButton(onClick = { folderActions.download(openFolder.id) }, enabled = downloadStatus == null && openFolder.videos.isNotEmpty()) {
-                    Icon(Icons.Rounded.Download, "Baixar a pasta para o celular")
+                OverflowMenu(menuOpen, { menuOpen = it }, "Opções da pasta") {
+                    DropdownMenuItem(text = { Text("Renomear pasta") }, onClick = { menuOpen = false; renamingFolder = true })
+                    DropdownMenuItem(text = { Text("Apagar pasta") }, onClick = { menuOpen = false; confirmDelete = true })
                 }
-                IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Rounded.Delete, "Apagar pasta") }
             } else if (openChat != null) {
                 Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Voltar para a lista de chats")
                     }
                     Text(openChat.title, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-                IconButton(onClick = folderActions.downloadChat, enabled = downloadStatus == null && videos.isNotEmpty()) {
-                    Icon(Icons.Rounded.Download, "Baixar todos os vídeos deste chat, um por vez")
                 }
             } else {
                 Column(Modifier.weight(1f)) {
@@ -149,8 +153,9 @@ fun LibraryScreen(
                         onClick = onBeam,
                         description = if (castActive) "Abrir transmissão em andamento" else "Escolher uma TV",
                     )
-                    IconButton(onClick = onLogout) {
-                        Icon(Icons.AutoMirrored.Rounded.Logout, contentDescription = "Sair da conta")
+                    OverflowMenu(menuOpen, { menuOpen = it }, "Mais opções") {
+                        DropdownMenuItem(text = { Text("Enviar diagnóstico") }, onClick = { menuOpen = false; onShareDiagnostics() })
+                        DropdownMenuItem(text = { Text("Sair da conta") }, onClick = { menuOpen = false; onLogout() })
                     }
                 }
             }
@@ -219,6 +224,14 @@ fun LibraryScreen(
             }
         } else {
             val shown = (openFolder?.videos ?: videos).filter { it.title.contains(query, ignoreCase = true) }
+            if (shown.isNotEmpty() && selected.isEmpty()) {
+                Text(
+                    "Segure um vídeo para selecionar vários (baixar, fila, pasta).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 20.dp),
+                )
+            }
             if (shown.isEmpty()) {
                 EmptyState(
                     if (openFolder != null) "Pasta vazia" else "Nenhum vídeo neste chat",
@@ -237,22 +250,31 @@ fun LibraryScreen(
     }
 
     pending?.let { video ->
-        ModalBottomSheet(onDismissRequest = { pending = null }) {
+        ModalBottomSheet(onDismissRequest = { pending = null; choosingTvFor = false }) {
             Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Transmitir “${video.title}”", style = MaterialTheme.typography.titleLarge)
+                Text(video.title, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                fun cast(device: CastDevice) {
+                    onPickTv(device)
+                    onCast(video, device)
+                    pending = null
+                    choosingTvFor = false
+                    onGoToPlaying()
+                }
+                if (tv != null && !choosingTvFor) {
+                    Button(onClick = { cast(tv) }, modifier = Modifier.fillMaxWidth()) { Text("Transmitir na ${tv.name}") }
+                    if (devices.size > 1) TextButton(onClick = { choosingTvFor = true }) { Text("Transmitir em outra TV") }
+                } else {
+                    Text("Escolha a TV", style = MaterialTheme.typography.titleMedium)
+                    TvPicker(devices, tv?.id, onPick = ::cast, onRescan = onRescan)
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { onPreview(video); pending = null }, modifier = Modifier.weight(1f)) {
-                        Text("Ver no celular")
-                    }
-                    OutlinedButton(onClick = { onEnqueue(video); pending = null }, modifier = Modifier.weight(1f)) {
-                        Text("Adicionar à fila")
+                    OutlinedButton(onClick = { onPreview(video); pending = null }, modifier = Modifier.weight(1f)) { Text("No celular") }
+                    OutlinedButton(onClick = { onEnqueue(video); pending = null }, modifier = Modifier.weight(1f)) { Text("Fila") }
+                    if (openFolder == null) {
+                        OutlinedButton(onClick = { addingToFolder = listOf(video); pending = null }, modifier = Modifier.weight(1f)) { Text("Pasta") }
                     }
                 }
-                if (openFolder == null) {
-                    OutlinedButton(onClick = { addingToFolder = listOf(video); pending = null }, modifier = Modifier.fillMaxWidth()) {
-                        Text("Adicionar à pasta")
-                    }
-                } else {
+                if (openFolder != null) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = { renamingVideo = video; pending = null }, modifier = Modifier.weight(1f)) { Text("Renomear") }
                         OutlinedButton(onClick = { moving = video; pending = null }, modifier = Modifier.weight(1f)) { Text("Mover") }
@@ -260,25 +282,6 @@ fun LibraryScreen(
                             Text("Tirar")
                         }
                     }
-                }
-                if (devices.isEmpty()) {
-                    Text(
-                        "Não achamos TVs. Confira se o celular e a TV estão no mesmo Wi-Fi.",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                devices.forEach { device ->
-                    DeviceRow(
-                        device = device,
-                        active = false,
-                        actionLabel = "Transmitir",
-                        onClick = {
-                            onCast(video, device)
-                            pending = null
-                            onGoToPlaying()
-                        },
-                    )
                 }
             }
         }
@@ -323,5 +326,14 @@ fun LibraryScreen(
                 dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancelar") } },
             )
         }
+    }
+}
+
+/** Menu ⋮ do cabeçalho: guarda as ações raras para não poluir a tela. */
+@Composable
+private fun OverflowMenu(open: Boolean, onOpen: (Boolean) -> Unit, description: String, items: @Composable () -> Unit) {
+    Box {
+        IconButton(onClick = { onOpen(true) }) { Icon(Icons.Rounded.MoreVert, description) }
+        DropdownMenu(expanded = open, onDismissRequest = { onOpen(false) }) { items() }
     }
 }

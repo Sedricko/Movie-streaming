@@ -44,6 +44,10 @@ Marque `[x]` ao concluir. Sempre: build verde + testes + atualizar este arquivo.
 - [ ] Aviso de formato incompatível; mensagens de erro do design system; acessibilidade (TalkBack).
 - [ ] Segurança: chave do banco TDLib no Keystore, token por stream, bind apenas no IP do Wi-Fi.
 
+- [x] Layout reorganizado: 2 abas (Biblioteca · TV). TV escolhida num lugar só (aba TV, lembrada entre aberturas);
+      tocar num vídeo = "Transmitir na <TV>" + No celular/Fila/Pasta; baixar só pela seleção (segurar) e pela fila;
+      diagnóstico e sair no menu ⋮.
+
 ## M6 — Expansão (v2)
 - [ ] Roku (ECP), Fire TV (Fling), LG webOS, Samsung/Tizen. Transcodificação/HLS sob demanda.
 - [ ] App receptor opcional para Android TV (player VLC/Media3 + login por QR) para quem não tem Chromecast.
