@@ -94,7 +94,7 @@ class DlnaCastGateway(context: Context) : CastGateway {
         _devices.value = renderers.values.map { CastDevice(it.udn, it.name, CastProtocol.Dlna) }.sortedBy { it.name }
     }
 
-    override suspend fun play(device: CastDevice, video: TgVideo, streamUrl: String, imageUrl: String?, subtitleUrl: String?) = withContext(Dispatchers.IO) {
+    override suspend fun play(device: CastDevice, video: TgVideo, streamUrl: String, imageUrl: String?) = withContext(Dispatchers.IO) {
         pollJob?.cancel()
         val r = renderers[device.id] ?: error("A TV saiu da rede. Procure de novo.")
         current = r

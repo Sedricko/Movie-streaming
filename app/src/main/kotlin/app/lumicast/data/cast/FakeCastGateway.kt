@@ -40,7 +40,7 @@ class FakeCastGateway : CastGateway {
 
     override fun stopDiscovery() = Unit
 
-    override suspend fun play(device: CastDevice, video: TgVideo, streamUrl: String, imageUrl: String?, subtitleUrl: String?) {
+    override suspend fun play(device: CastDevice, video: TgVideo, streamUrl: String, imageUrl: String?) {
         ticker?.cancel()
         val start = (video.durationSec * video.resumeFraction).toInt()
         _playback.value = PlaybackState(video, device, PlayStatus.Connecting, start, 0.05f, volume = 0.5f)
