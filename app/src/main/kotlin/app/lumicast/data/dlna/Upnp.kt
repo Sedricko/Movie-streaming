@@ -73,22 +73,15 @@ internal fun didl(
     size: Long,
     upnpClass: String = "object.item.videoItem",
     albumArt: String? = null,
-    subtitle: String? = null,
 ): String {
     val duration = if (durationSec > 0) """ duration="${upnpTime(durationSec)}.000"""" else ""
     val sizeAttr = if (size > 0) """ size="$size"""" else ""
     val art = albumArt?.let { "<upnp:albumArtURI>${escapeXml(it)}</upnp:albumArtURI>" }.orEmpty()
-    // Legenda: Samsung/LG leem sec:CaptionInfoEx; outras TVs, um <res> extra do tipo text/srt.
-    val sub = subtitle?.let {
-        """<sec:CaptionInfoEx sec:type="srt">${escapeXml(it)}</sec:CaptionInfoEx>"""
-    }.orEmpty()
-    val subRes = subtitle?.let { """<res protocolInfo="http-get:*:text/srt:*">${escapeXml(it)}</res>""" }.orEmpty()
     return """<DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" """ +
-        """xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:sec="http://www.sec.co.kr/">""" +
-        """<item id="0" parentID="-1" restricted="1">""" +
-        "<dc:title>${escapeXml(title)}</dc:title><upnp:class>$upnpClass</upnp:class>$art$sub" +
+        """xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/"><item id="0" parentID="-1" restricted="1">""" +
+        "<dc:title>${escapeXml(title)}</dc:title><upnp:class>$upnpClass</upnp:class>$art" +
         """<res protocolInfo="http-get:*:$mime:$DLNA_FEATURES"$duration$sizeAttr>""" +
-        "${escapeXml(url)}</res>$subRes</item></DIDL-Lite>"
+        "${escapeXml(url)}</res></item></DIDL-Lite>"
 }
 
 /** Pode pedir trechos (Range), é stream e não precisa baixar tudo antes. */

@@ -11,11 +11,6 @@ import app.lumicast.domain.TelegramGateway
 import app.lumicast.domain.TgChat
 import app.lumicast.domain.TgVideo
 import app.lumicast.domain.VideoPage
-import app.lumicast.domain.pickSubtitle
-import java.nio.ByteBuffer
-import java.nio.charset.CharacterCodingException
-import java.nio.charset.Charset
-import java.nio.charset.CodingErrorAction
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -214,32 +209,6 @@ class TdlibTelegramGateway(context: Context, private val dbDirName: String) : Te
         return if (f.local.isDownloadingCompleted) 1f else if (size > 0) f.local.downloadedSize.toFloat() / size else 0f
     }
 
-    override suspend fun subtitleText(video: TgVideo): String? {
-        // Documentos do chat (até 300 mais recentes): legendas costumam ser enviadas junto com os episódios.
-        val docs = mutableMapOf<String, TdApi.File>()
-        var from = 0L
-        for (page in 0 until 3) {
-            val found = send(
-                TdApi.SearchChatMessages().apply {
-                    chatId = video.chatId
-                    query = ""
-                    filter = TdApi.SearchMessagesFilterDocument()
-                    fromMessageId = from
-                    offset = 0
-                    limit = 100
-                },
-            ) as TdApi.FoundChatMessages
-            found.messages.forEach { m -> (m.content as? TdApi.MessageDocument)?.document?.let { docs.putIfAbsent(it.fileName, it.document) } }
-            from = found.nextFromMessageId
-            if (from == 0L) break
-        }
-        val name = pickSubtitle(video.title, docs.keys.toList()) ?: return null
-        val file = send(TdApi.DownloadFile(docs.getValue(name).id, 16, 0, 0, true)) as TdApi.File
-        if (!file.local.isDownloadingCompleted) return null
-        val bytes = withContext(Dispatchers.IO) { File(file.local.path).readBytes() }
-        return decodeText(bytes)
-    }
-
     override suspend fun cacheBytes(): Long = (send(TdApi.GetStorageStatisticsFast()) as TdApi.StorageStatisticsFast).filesSize
 
     override suspend fun trimCache(keepBytes: Long) {
@@ -340,11 +309,4 @@ class TdlibTelegramGateway(context: Context, private val dbDirName: String) : Te
         const val READ_TIMEOUT_MS = 30_000L
         const val MOVE_COOLDOWN_MS = 1_000L
     }
-}
-
-/** Legendas brasileiras antigas costumam vir em Windows-1252, não UTF-8: tenta UTF-8 estrito e cai para 1252. */
-internal fun decodeText(bytes: ByteArray): String = try {
-    Charsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes)).toString()
-} catch (_: CharacterCodingException) {
-    String(bytes, Charset.forName("windows-1252"))
 }

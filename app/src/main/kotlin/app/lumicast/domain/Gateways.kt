@@ -48,9 +48,6 @@ interface TelegramGateway {
     /** Quanto do arquivo já está no celular, 0f..1f (para mostrar o progresso de um download). */
     fun downloadedFraction(video: TgVideo): Float
 
-    /** Texto da legenda (.srt/.vtt) enviada no mesmo chat que combina com o vídeo, ou null. */
-    suspend fun subtitleText(video: TgVideo): String?
-
     /** Espaço que o cache do Telegram ocupa neste celular, em bytes. */
     suspend fun cacheBytes(): Long
 

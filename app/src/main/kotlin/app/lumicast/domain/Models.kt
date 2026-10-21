@@ -87,8 +87,6 @@ data class AppSettings(
     val theme: ThemeMode = ThemeMode.System,
     /** Tamanho máximo do cache do Telegram em GB (0 = sem limite). O excesso é apagado ao parar de transmitir. */
     val cacheLimitGb: Int = 0,
-    /** Procurar legenda (.srt/.vtt) no mesmo chat e mostrar na TV. */
-    val subtitles: Boolean = true,
 )
 
 /** Espaço usado pelo app (não conta os vídeos salvos na galeria, que são seus). */

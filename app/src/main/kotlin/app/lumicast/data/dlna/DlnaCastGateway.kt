@@ -104,7 +104,7 @@ class DlnaCastGateway(context: Context) : CastGateway {
         av(
             r, "SetAVTransportURI",
             "CurrentURI" to streamUrl,
-            "CurrentURIMetaData" to didl(video.title, streamUrl, video.mimeType, video.durationSec, video.sizeBytes, albumArt = imageUrl, subtitle = subtitleUrl),
+            "CurrentURIMetaData" to didl(video.title, streamUrl, video.mimeType, video.durationSec, video.sizeBytes, albumArt = imageUrl),
         )
         av(r, "Play", "Speed" to "1")
         Diag.log("dlna", "tocando em ${r.name}")

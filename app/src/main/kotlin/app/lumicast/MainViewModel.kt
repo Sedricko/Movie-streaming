@@ -13,8 +13,6 @@ import app.lumicast.data.cast.renderConnectedSplash
 import app.lumicast.data.stream.BytesSource
 import app.lumicast.domain.StorageInfo
 import app.lumicast.domain.ThemeMode
-import app.lumicast.domain.CastProtocol
-import app.lumicast.domain.srtToVtt
 import app.lumicast.data.stream.RangeStreamServer
 import app.lumicast.data.stream.findLanIPv4
 import app.lumicast.domain.Account
@@ -119,7 +117,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             autoConvert = prefs.getBoolean("set.autoConvert", true),
             showSplash = prefs.getBoolean("set.showSplash", true),
             cacheLimitGb = prefs.getInt("set.cacheLimitGb", 0),
-            subtitles = prefs.getBoolean("set.subtitles", true),
             theme = runCatching { ThemeMode.valueOf(prefs.getString("set.theme", null)!!) }.getOrDefault(ThemeMode.System),
         ),
     )
@@ -133,7 +130,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             .putBoolean("set.dlna", new.dlna).putBoolean("set.volumeKeys", new.volumeKeys)
             .putBoolean("set.autoConvert", new.autoConvert)
             .putBoolean("set.showSplash", new.showSplash).putString("set.theme", new.theme.name)
-            .putInt("set.cacheLimitGb", new.cacheLimitGb).putBoolean("set.subtitles", new.subtitles)
+            .putInt("set.cacheLimitGb", new.cacheLimitGb)
             .commit() // commit: o MultiCastGateway lê "set.dlna" logo em seguida
         if (dlnaChanged) cast.startDiscovery()
     }
@@ -622,16 +619,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         RangeStreamServer(ip).also { it.start(); server = it }
     }
 
-    /** Legenda do mesmo chat, no formato que a TV entende: VTT para Chromecast, SRT para DLNA. */
-    private suspend fun subtitleUrl(video: TgVideo, device: CastDevice): String? {
-        if (!_settings.value.subtitles) return null
-        val text = runCatching { telegram.subtitleText(video) }.onFailure { Diag.log("legenda", "falhou: ${it.message}") }.getOrNull()
-            ?: return null
-        Diag.log("legenda", "file=${video.fileId}: legenda encontrada")
-        val (body, mime) = if (device.protocol == CastProtocol.Dlna) text to "text/srt" else srtToVtt(text) to "text/vtt"
-        return ensureServer().register(BytesSource(body.toByteArray(), "$mime; charset=utf-8"))
-    }
-
     /** Miniatura do vídeo servida para a TV mostrar enquanto carrega (null se não houver). */
     private suspend fun thumbnailUrl(video: TgVideo): String? {
         val path = runCatching { telegram.thumbnail(video) }.getOrNull() ?: return null
@@ -713,13 +700,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             streaming = video to url
             streamSource = source
             progressJob = viewModelScope.launch { while (true) { downloaded.value = source.downloadedFraction; delay(1_000) } }
-            cast.play(
-                device,
-                video.copy(mimeType = source.mimeType, sizeBytes = source.sizeBytes),
-                url,
-                imageUrl = thumbnailUrl(video),
-                subtitleUrl = subtitleUrl(video, device),
-            )
+            cast.play(device, video.copy(mimeType = source.mimeType, sizeBytes = source.sizeBytes), url, imageUrl = thumbnailUrl(video))
             Diag.log("vm", "transmitindo file=${video.fileId} (${video.mimeType}, ${video.sizeBytes} B) em ${device.protocol}")
         }.onFailure {
             endStream()

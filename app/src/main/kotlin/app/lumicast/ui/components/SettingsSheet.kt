@@ -67,11 +67,6 @@ fun SettingsSheet(
                 settings.autoConvert,
             ) { onChange(settings.copy(autoConvert = it)) }
             SettingSwitch(
-                "Legendas automáticas",
-                "Se houver um arquivo .srt ou .vtt no mesmo chat com o nome ou o número do episódio, ele aparece na TV.",
-                settings.subtitles,
-            ) { onChange(settings.copy(subtitles = it)) }
-            SettingSwitch(
                 "Mostrar o logo na TV ao conectar",
                 "Ao escolher a TV, ela mostra “Lumicast conectado” até você mandar um vídeo, e volta a mostrar quando a fila acaba.",
                 settings.showSplash,
