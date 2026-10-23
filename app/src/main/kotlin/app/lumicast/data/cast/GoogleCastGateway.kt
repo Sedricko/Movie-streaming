@@ -73,6 +73,7 @@ class GoogleCastGateway(context: Context) : CastGateway {
     private var thumbUrl: String? = null
     /** Já tocou desde o último load? Erro antes de tocar é formato que a TV não aceita, não queda de rede. */
     private var playedSinceLoad = false
+    private var autoplayKicked = false
     private val router = MediaRouter.getInstance(context)
     @Suppress("DEPRECATION") // a versão com Executor devolve Task; a síncrona basta aqui
     private val castContext = CastContext.getSharedInstance(context)
@@ -110,6 +111,12 @@ class GoogleCastGateway(context: Context) : CastGateway {
             }
             Diag.log("cast", "estado=${client.playerState} motivo=${client.idleReason} -> $status")
             if (status == PlayStatus.Playing) playedSinceLoad = true
+            // Depois de mostrar a imagem "conectado", a TV às vezes carrega o vídeo pausado, ignorando o autoplay.
+            if (status == PlayStatus.Paused && !playedSinceLoad && !autoplayKicked) {
+                autoplayKicked = true
+                Diag.log("cast", "vídeo chegou pausado sem ter tocado: mandando play")
+                client.play()
+            }
             if (client.playerState == MediaStatus.PLAYER_STATE_IDLE && client.idleReason == MediaStatus.IDLE_REASON_ERROR) {
                 if (playedSinceLoad) {
                     reconnect("a TV parou com erro") // ex.: Wi-Fi oscilou e a TV perdeu o stream
@@ -223,6 +230,7 @@ class GoogleCastGateway(context: Context) : CastGateway {
         val imageUrl = thumbUrl
         casting = null // trocar de TV encerra a sessão anterior; isso não é queda
         playedSinceLoad = false
+        autoplayKicked = false
         val start = (video.durationSec * video.resumeFraction).toLong()
         _playback.value = PlaybackState(video, device, PlayStatus.Connecting, start.toInt())
         val session = connect(device)
@@ -240,7 +248,9 @@ class GoogleCastGateway(context: Context) : CastGateway {
             )
             .build()
         client.load(MediaLoadRequestData.Builder().setMediaInfo(info).setAutoplay(true).setCurrentTime(start * 1000).build())
-        _playback.update { it.copy(volume = session.volume.toFloat()) }
+        // Volume fixo (comum em Android TV com HDMI-CEC): sem barra, o controle da TV manda.
+        val fixed = router.selectedRoute.volumeHandling == MediaRouter.RouteInfo.PLAYBACK_VOLUME_FIXED
+        _playback.update { it.copy(volume = if (fixed) null else session.volume.toFloat()) }
         casting = Triple(device, video, streamUrl)
     }
 
@@ -289,7 +299,16 @@ class GoogleCastGateway(context: Context) : CastGateway {
 
     override suspend fun setVolume(level: Float) = withContext(Dispatchers.Main) {
         val v = level.coerceIn(0f, 1f)
-        castContext.sessionManager.currentCastSession?.volume = v.toDouble()
+        val route = router.selectedRoute
+        Diag.log("cast", "volume ${(v * 100).toInt()}%: rota ${route.name}, controle=${route.volumeHandling}, máx=${route.volumeMax}")
+        if (route.volumeHandling == MediaRouter.RouteInfo.PLAYBACK_VOLUME_FIXED) {
+            _playback.update { it.copy(volume = null) } // esconde a barra: não adianta
+            throw UnsupportedOperationException("Esta TV não deixa o celular mudar o volume. Use o controle da TV.")
+        }
+        // Os dois caminhos: alguns aparelhos só obedecem um deles (sessão Cast ou rota do Android).
+        runCatching { castContext.sessionManager.currentCastSession?.volume = v.toDouble() }
+            .onFailure { Diag.log("cast", "volume pela sessão falhou: ${it.message}") }
+        if (route.volumeMax > 0) route.requestSetVolume((v * route.volumeMax).toInt())
         _playback.update { it.copy(volume = v) }
     }
 
