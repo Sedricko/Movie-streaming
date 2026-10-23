@@ -30,7 +30,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.lumicast.domain.PlayStatus
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.material.icons.automirrored.rounded.VolumeDown
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material3.DropdownMenu
@@ -148,7 +147,12 @@ fun NowPlayingSection(
                     modifier = Modifier.weight(1f).semantics { contentDescription = "Volume da TV" },
                 )
                 Icon(Icons.AutoMirrored.Rounded.VolumeUp, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            } ?: Spacer(Modifier.weight(1f))
+            } ?: Text(
+                if (state.volumeFixed) "Volume controlado pela TV: use o controle remoto." else "",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
             Box {
                 TextButton(onClick = { speedMenu = true }) { Text("${formatSpeed(state.speed)}×") }
                 DropdownMenu(expanded = speedMenu, onDismissRequest = { speedMenu = false }) {

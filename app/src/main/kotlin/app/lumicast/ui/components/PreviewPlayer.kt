@@ -1,8 +1,17 @@
 package app.lumicast.ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.aspectRatio
+import android.view.WindowManager
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.window.DialogWindowProvider
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
@@ -14,7 +23,6 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import app.lumicast.Diag
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
@@ -45,14 +53,31 @@ fun PreviewPlayer(url: String, onDismiss: () -> Unit) {
         }
     }
     DisposableEffect(player) { onDispose { player.release() } }
-    // Largura total: com a largura padrão de diálogo o player ficava estreito demais.
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Column(Modifier.fillMaxWidth().background(Color.Black)) {
+    // Tela cheia de verdade: sem margens de diálogo, sem barras do Android, vídeo ajustado (em pé ou deitado).
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+        val window = (LocalView.current.parent as? DialogWindowProvider)?.window
+        val view = LocalView.current
+        LaunchedEffect(window) {
+            window?.let {
+                it.setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT)
+                WindowCompat.getInsetsController(it, view).apply {
+                    hide(WindowInsetsCompat.Type.systemBars())
+                    systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                }
+            }
+        }
+        Box(Modifier.fillMaxSize().background(Color.Black)) {
             AndroidView(
-                factory = { PlayerView(it).apply { this.player = player; setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS) } },
-                modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f),
+                factory = {
+                    PlayerView(it).apply {
+                        this.player = player
+                        setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
+                        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                    }
+                },
+                modifier = Modifier.fillMaxSize(),
             )
-            error?.let { Text(it, color = Color.White, modifier = Modifier.padding(16.dp)) }
+            error?.let { Text(it, color = Color.White, modifier = Modifier.align(Alignment.Center).padding(16.dp)) }
         }
     }
 }
