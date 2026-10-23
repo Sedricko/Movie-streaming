@@ -660,15 +660,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }.onFailure(::toast)
     }
 
-    fun endPreview() = viewModelScope.launch {
-        previewing?.let { (video, url) ->
-            server?.unregister(url)
-            if (streaming?.first?.fileId != video.fileId) telegram.closeStream(video) // a TV pode estar usando o mesmo arquivo
-        }
-        previewSource?.close()
-        previewSource = null
+    /**
+     * Fecha a prévia NA HORA (sem esperar o Telegram): antes, o fechamento terminava depois de a prévia seguinte
+     * abrir e fechava a nova junto, por isso "Ver no celular" só funcionava uma vez.
+     */
+    fun endPreview() {
+        val old = previewing
+        val source = previewSource
         previewing = null
+        previewSource = null
         _previewUrl.value = null
+        source?.close()
+        old?.let { (video, url) ->
+            server?.unregister(url)
+            if (streaming?.first?.fileId != video.fileId) { // a TV pode estar usando o mesmo arquivo
+                viewModelScope.launch { telegram.closeStream(video) }
+            }
+        }
     }
 
     /** TDLib (download progressivo) → servidor HTTP local na LAN → TV. No modo demonstração, só simula. */

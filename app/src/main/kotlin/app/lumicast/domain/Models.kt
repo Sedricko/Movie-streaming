@@ -57,6 +57,8 @@ data class PlaybackState(
     val downloadedFraction: Float = 0f,
     /** Volume da TV 0f..1f, ou null se ainda não sabemos. */
     val volume: Float? = null,
+    /** A TV não deixa o celular mudar o volume (ex.: Android TV com volume pelo HDMI-CEC). */
+    val volumeFixed: Boolean = false,
     val speed: Float = 1f,
 )
 

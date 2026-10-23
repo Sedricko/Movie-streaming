@@ -250,7 +250,8 @@ class GoogleCastGateway(context: Context) : CastGateway {
         client.load(MediaLoadRequestData.Builder().setMediaInfo(info).setAutoplay(true).setCurrentTime(start * 1000).build())
         // Volume fixo (comum em Android TV com HDMI-CEC): sem barra, o controle da TV manda.
         val fixed = router.selectedRoute.volumeHandling == MediaRouter.RouteInfo.PLAYBACK_VOLUME_FIXED
-        _playback.update { it.copy(volume = if (fixed) null else session.volume.toFloat()) }
+        Diag.log("cast", "volume da TV: ${if (fixed) "fixo (só pelo controle da TV)" else "ajustável"} · rota ${router.selectedRoute.name}")
+        _playback.update { it.copy(volume = if (fixed) null else session.volume.toFloat(), volumeFixed = fixed) }
         casting = Triple(device, video, streamUrl)
     }
 
@@ -302,7 +303,7 @@ class GoogleCastGateway(context: Context) : CastGateway {
         val route = router.selectedRoute
         Diag.log("cast", "volume ${(v * 100).toInt()}%: rota ${route.name}, controle=${route.volumeHandling}, máx=${route.volumeMax}")
         if (route.volumeHandling == MediaRouter.RouteInfo.PLAYBACK_VOLUME_FIXED) {
-            _playback.update { it.copy(volume = null) } // esconde a barra: não adianta
+            _playback.update { it.copy(volume = null, volumeFixed = true) } // troca a barra pelo aviso
             throw UnsupportedOperationException("Esta TV não deixa o celular mudar o volume. Use o controle da TV.")
         }
         // Os dois caminhos: alguns aparelhos só obedecem um deles (sessão Cast ou rota do Android).
