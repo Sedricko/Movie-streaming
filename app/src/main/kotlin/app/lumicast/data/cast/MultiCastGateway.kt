@@ -50,9 +50,9 @@ class MultiCastGateway(
         dlna.stopDiscovery()
     }
 
-    override suspend fun play(device: CastDevice, video: TgVideo, streamUrl: String, imageUrl: String?, subtitleUrl: String?) {
+    override suspend fun play(device: CastDevice, video: TgVideo, streamUrl: String, imageUrl: String?) {
         switchTo(device)
-        now().play(device, video, streamUrl, imageUrl, subtitleUrl)
+        now().play(device, video, streamUrl, imageUrl)
     }
 
     override suspend fun showImage(device: CastDevice, imageUrl: String, title: String) {

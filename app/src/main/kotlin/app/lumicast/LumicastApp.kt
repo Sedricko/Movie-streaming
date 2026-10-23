@@ -2,6 +2,7 @@ package app.lumicast
 
 import android.app.Application
 import android.content.Context
+import android.content.SharedPreferences
 import app.lumicast.data.cast.FakeCastGateway
 import app.lumicast.data.cast.GoogleCastGateway
 import app.lumicast.data.cast.MultiCastGateway
@@ -20,16 +21,24 @@ import kotlinx.coroutines.flow.MutableStateFlow
 
 /** Contêiner manual de dependências. No marco M1 isso vira módulos Hilt. */
 class AppContainer(context: Context) {
+    /** Configurações e TV ficam em comum; o resto (Telegram, pastas, progresso…) é de cada conta. */
+    val globalPrefs: SharedPreferences = context.getSharedPreferences("lumicast", 0)
+    val accountId: String = globalPrefs.getString("account", null) ?: "0"
+
+    /** A conta 0 usa os nomes de antes: quem já usava o app não perde nada ao ganhar outras contas. */
+    fun accountName(base: String) = if (accountId == "0") base else "$base-$accountId"
+    val accountPrefs: SharedPreferences = context.getSharedPreferences(accountName("lumicast"), 0)
+
     /** Sem api_id no build, o app abre em modo demonstração (Telegram e TVs de mentira). */
     val realMode = BuildConfig.TELEGRAM_API_ID != 0
-    val telegram: TelegramGateway = if (realMode) TdlibTelegramGateway(context) else FakeTelegramGateway()
+    val telegram: TelegramGateway = if (realMode) TdlibTelegramGateway(context, dbDirName = accountName("tdlib")) else FakeTelegramGateway()
     val cast: CastGateway = if (realMode) {
         val prefs = context.getSharedPreferences("lumicast", 0)
         MultiCastGateway(GoogleCastGateway(context), DlnaCastGateway(context), dlnaEnabled = { prefs.getBoolean("set.dlna", true) })
     } else {
         FakeCastGateway()
     }
-    val folders = FolderStore(context)
+    val folders = FolderStore(context, accountName("lumicast"))
     val transfers = Transfers()
 }
 

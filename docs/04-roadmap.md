@@ -53,6 +53,9 @@ Marque `[x]` ao concluir. Sempre: build verde + testes + atualizar este arquivo.
 - [x] Paginação (todos os vídeos/chats), continuar de onde parou, próximo episódio automático, volume e velocidade,
       tela Configurações (cada recurso automático liga/desliga).
 
+- [x] Logo novo + tela "conectado" na TV, tema claro/escuro, downloads em segundo plano com notificação,
+      gerenciar espaço (cache/convertidos/limite), várias contas do Telegram.
+
 ## M6 — Expansão (v2)
 - [ ] Roku (ECP), Fire TV (Fling), LG webOS, Samsung/Tizen. Transcodificação/HLS sob demanda.
 - [ ] App receptor opcional para Android TV (player VLC/Media3 + login por QR) para quem não tem Chromecast.

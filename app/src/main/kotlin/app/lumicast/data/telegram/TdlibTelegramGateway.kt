@@ -38,7 +38,7 @@ internal fun downloadReaches(offset: Long, active: Boolean, downloadOffset: Long
 class TdException(val error: TdApi.Error) : Exception(error.message)
 
 /** Telegram real via TDLib (interface Java/JNI oficial). Veja docs/06-especificacao-tecnica.md. */
-class TdlibTelegramGateway(context: Context) : TelegramGateway {
+class TdlibTelegramGateway(context: Context, private val dbDirName: String) : TelegramGateway {
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -83,6 +83,7 @@ class TdlibTelegramGateway(context: Context) : TelegramGateway {
                 _auth.value = AuthState.Ready(name)
             }
             is TdApi.AuthorizationStateClosed -> { // após sair, a instância morre: criar outra
+                closed.tryEmit(Unit)
                 files.clear()
                 client = newClient()
             }
@@ -96,7 +97,7 @@ class TdlibTelegramGateway(context: Context) : TelegramGateway {
             _auth.value = AuthState.Failed("App sem chave do Telegram. Defina TELEGRAM_API_ID e TELEGRAM_API_HASH no local.properties.")
             return
         }
-        val dir = File(appContext.filesDir, "tdlib")
+        val dir = File(appContext.filesDir, dbDirName) // uma pasta por conta
         val params = TdApi.SetTdlibParameters().apply {
             databaseDirectory = dir.absolutePath
             filesDirectory = File(dir, "files").absolutePath
@@ -132,6 +133,13 @@ class TdlibTelegramGateway(context: Context) : TelegramGateway {
     override suspend fun submitPassword(password: String) = authStep(TdApi.CheckAuthenticationPassword(password))
 
     override suspend fun logout() = authStep(TdApi.LogOut())
+
+    private val closed = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+    override suspend fun close() {
+        runCatching { send(TdApi.Close()) }
+        withTimeoutOrNull(3_000) { closed.first() } // o TDLib grava o que falta e avisa; 3 s no máximo
+    }
 
     override suspend fun chats(): List<TgChat> {
         // LoadChats carrega mais um bloco a cada chamada e devolve 404 quando já carregou tudo.

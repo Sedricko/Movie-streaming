@@ -32,6 +32,7 @@ import app.lumicast.ui.components.MiniPlayer
 import app.lumicast.ui.components.TransferBar
 import app.lumicast.ui.components.PreviewPlayer
 import app.lumicast.ui.components.SettingsSheet
+import app.lumicast.ui.components.AccountsSheet
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.lumicast.ui.screens.LibraryScreen
@@ -56,6 +57,8 @@ fun MainScreen(vm: MainViewModel) {
             onCode = vm::submitCode,
             onResendCode = vm::resendCode,
             onPassword = vm::submitPassword,
+            otherAccounts = vm.accounts.collectAsStateWithLifecycle().value.filter { it.id != vm.currentAccountId },
+            onSwitchAccount = vm::switchAccount,
         )
         return
     }
@@ -92,6 +95,11 @@ fun MainScreen(vm: MainViewModel) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val conversion by vm.conversion.collectAsStateWithLifecycle()
     var showSettings by remember { mutableStateOf(false) }
+    var showAccounts by remember { mutableStateOf(false) }
+    val accounts by vm.accounts.collectAsStateWithLifecycle()
+    if (showAccounts) {
+        AccountsSheet(accounts, vm.currentAccountId, onSwitch = vm::switchAccount, onAdd = vm::addAccount, onDismiss = { showAccounts = false })
+    }
     val storage by vm.storage.collectAsStateWithLifecycle()
     if (showSettings) {
         LaunchedEffect(Unit) { vm.refreshStorage() }
@@ -156,6 +164,7 @@ fun MainScreen(vm: MainViewModel) {
                     onRescan = vm::rescan,
                     onShareDiagnostics = vm::shareDiagnostics,
                     onOpenSettings = { showSettings = true },
+                    onOpenAccounts = { showAccounts = true },
                     pinned = pinned,
                     onTogglePin = vm::togglePin,
                     loadThumbnail = vm::thumbnail,

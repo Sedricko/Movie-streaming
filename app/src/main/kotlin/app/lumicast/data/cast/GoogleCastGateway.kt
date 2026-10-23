@@ -16,7 +16,6 @@ import com.google.android.gms.cast.MediaInfo
 import com.google.android.gms.cast.MediaLoadRequestData
 import com.google.android.gms.cast.MediaMetadata
 import com.google.android.gms.cast.MediaSeekOptions
-import com.google.android.gms.cast.MediaTrack
 import com.google.android.gms.common.images.WebImage
 import android.net.Uri
 import com.google.android.gms.cast.MediaStatus
@@ -70,8 +69,8 @@ class GoogleCastGateway(context: Context) : CastGateway {
     /** O que está na TV agora, para reconectar se a conexão cair; null depois de parar ou terminar. */
     private var casting: Triple<CastDevice, TgVideo, String>? = null
     private var reconnectJob: Job? = null
-    /** Miniatura e legenda do vídeo atual (para reaproveitar na reconexão). */
-    private var extras: Pair<String?, String?> = null to null
+    /** Miniatura do vídeo atual (para reaproveitar na reconexão). */
+    private var thumbUrl: String? = null
     /** Já tocou desde o último load? Erro antes de tocar é formato que a TV não aceita, não queda de rede. */
     private var playedSinceLoad = false
     private val router = MediaRouter.getInstance(context)
@@ -201,9 +200,9 @@ class GoogleCastGateway(context: Context) : CastGateway {
 
     override fun stopDiscovery() = router.removeCallback(routerCallback)
 
-    override suspend fun play(device: CastDevice, video: TgVideo, streamUrl: String, imageUrl: String?, subtitleUrl: String?) = withContext(Dispatchers.Main) {
+    override suspend fun play(device: CastDevice, video: TgVideo, streamUrl: String, imageUrl: String?) = withContext(Dispatchers.Main) {
         reconnectJob?.cancel() // o usuário escolheu outro vídeo: esquecer a reconexão pendente
-        extras = imageUrl to subtitleUrl
+        thumbUrl = imageUrl
         load(device, video, streamUrl)
     }
 
@@ -221,7 +220,7 @@ class GoogleCastGateway(context: Context) : CastGateway {
     }
 
     private suspend fun load(device: CastDevice, video: TgVideo, streamUrl: String) = withContext(Dispatchers.Main) {
-        val (imageUrl, subtitleUrl) = extras
+        val imageUrl = thumbUrl
         casting = null // trocar de TV encerra a sessão anterior; isso não é queda
         playedSinceLoad = false
         val start = (video.durationSec * video.resumeFraction).toLong()
@@ -239,25 +238,8 @@ class GoogleCastGateway(context: Context) : CastGateway {
                     imageUrl?.let { addImage(WebImage(Uri.parse(it))) } // a TV mostra a miniatura enquanto carrega
                 },
             )
-            .apply {
-                if (subtitleUrl != null) {
-                    setMediaTracks(
-                        listOf(
-                            MediaTrack.Builder(SUBTITLE_TRACK, MediaTrack.TYPE_TEXT)
-                                .setSubtype(MediaTrack.SUBTYPE_SUBTITLES)
-                                .setContentId(subtitleUrl)
-                                .setContentType("text/vtt")
-                                .setLanguage("pt")
-                                .setName("Legenda")
-                                .build(),
-                        ),
-                    )
-                }
-            }
             .build()
-        val request = MediaLoadRequestData.Builder().setMediaInfo(info).setAutoplay(true).setCurrentTime(start * 1000)
-        if (subtitleUrl != null) request.setActiveTrackIds(longArrayOf(SUBTITLE_TRACK))
-        client.load(request.build())
+        client.load(MediaLoadRequestData.Builder().setMediaInfo(info).setAutoplay(true).setCurrentTime(start * 1000).build())
         _playback.update { it.copy(volume = session.volume.toFloat()) }
         casting = Triple(device, video, streamUrl)
     }
@@ -329,7 +311,6 @@ class GoogleCastGateway(context: Context) : CastGateway {
     }
 
     private companion object {
-        const val SUBTITLE_TRACK = 1L
         val RETRY_DELAYS_MS = listOf(2_000L, 4_000L, 8_000L, 15_000L, 30_000L)
     }
 }
