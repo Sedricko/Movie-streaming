@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import org.drinkless.tdlib.Client
@@ -214,9 +215,15 @@ class TdlibTelegramGateway(context: Context, private val dbDirName: String) : Te
     }
 
     override suspend fun download(video: TgVideo): String {
-        val file = send(TdApi.DownloadFile(video.fileId, 1, 0, 0, true)) as TdApi.File
-        check(file.local.isDownloadingCompleted) { "O download de “${video.title}” não terminou. Tente de novo." }
-        return file.local.path
+        // Se o mesmo vídeo também está sendo transmitido, a TV reposiciona o download (seek) e esta chamada volta com o arquivo
+        // incompleto. O TDLib guarda as partes baixadas: pedir de novo continua de onde parou, então tentamos algumas vezes.
+        repeat(DOWNLOAD_TRIES) { n ->
+            val file = send(TdApi.DownloadFile(video.fileId, 1, 0, 0, true)) as TdApi.File
+            if (file.local.isDownloadingCompleted) return file.local.path
+            Diag.log("download", "file=${video.fileId}: voltou incompleto (tentativa ${n + 1} de $DOWNLOAD_TRIES), pedindo o resto")
+            delay(500)
+        }
+        error("O download de “${video.title}” não terminou. Tente de novo.")
     }
 
     override fun downloadedFraction(video: TgVideo): Float {
@@ -326,6 +333,7 @@ class TdlibTelegramGateway(context: Context, private val dbDirName: String) : Te
     private companion object {
         const val CHAT_LIMIT = 2_000
         const val STREAM_PRIORITY = 32
+        const val DOWNLOAD_TRIES = 4
         const val TAIL_BYTES = 4L * 1024 * 1024
         const val TAIL_TIMEOUT_MS = 8_000L
         const val READ_TIMEOUT_MS = 30_000L
