@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -203,6 +205,7 @@ fun LibraryScreen(
             leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
             placeholder = { Text(if (openChat == null && openFolder == null) "Buscar chat ou pasta" else "Buscar vídeo") },
             singleLine = true,
+            shape = CircleShape,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
         )
 
@@ -277,7 +280,7 @@ fun LibraryScreen(
                     onGoToPlaying()
                 }
                 if (tv != null && !choosingTvFor) {
-                    Button(onClick = { cast(tv) }, modifier = Modifier.fillMaxWidth()) { Text("Transmitir na ${tv.name}") }
+                    Button(onClick = { cast(tv) }, shape = CircleShape, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("Transmitir na ${tv.name}") }
                     if (devices.size > 1) TextButton(onClick = { choosingTvFor = true }) { Text("Transmitir em outra TV") }
                 } else {
                     Text("Escolha a TV", style = MaterialTheme.typography.titleMedium)

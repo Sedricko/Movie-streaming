@@ -116,7 +116,7 @@ fun VideoRow(
     ) {
         Box(
             modifier = Modifier
-                .size(width = 112.dp, height = 68.dp)
+                .size(width = 128.dp, height = 72.dp)
                 .clip(LumiShapes.Thumb)
                 .background(MaterialTheme.colorScheme.surfaceVariant),
             contentAlignment = Alignment.Center,
@@ -126,6 +126,12 @@ fun VideoRow(
                 if (selected) Icons.Rounded.CheckCircle else Icons.Rounded.PlayArrow,
                 contentDescription = null,
                 tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                formatDuration(video.durationSec),
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White,
+                modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp).clip(CircleShape).background(Color(0xB3000000)).padding(horizontal = 7.dp, vertical = 1.dp),
             )
             if (video.resumeFraction in 0.01f..0.99f) {
                 Box(
@@ -140,7 +146,7 @@ fun VideoRow(
         Column(Modifier.weight(1f)) {
             Text(video.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(
-                "${formatDuration(video.durationSec)} • ${formatSize(video.sizeBytes)}",
+                formatSize(video.sizeBytes),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

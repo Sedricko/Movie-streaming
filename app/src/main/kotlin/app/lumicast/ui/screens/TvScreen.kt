@@ -1,6 +1,10 @@
 package app.lumicast.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.draw.clip
+import app.lumicast.ui.theme.LumiShapes
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -69,11 +73,15 @@ fun TvScreen(
         modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(
+            Modifier.fillMaxWidth().clip(LumiShapes.Card).background(MaterialTheme.colorScheme.surface).padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
             Icon(Icons.Rounded.Tv, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
             Column(Modifier.weight(1f)) {
                 Text("TV", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(tv?.name ?: "Nenhuma escolhida", style = MaterialTheme.typography.titleMedium)
+                Text(tv?.name ?: "Nenhuma escolhida", style = MaterialTheme.typography.titleLarge)
             }
             TextButton(onClick = { picking = true }) { Text(if (tv == null) "Escolher" else "Trocar") }
         }
