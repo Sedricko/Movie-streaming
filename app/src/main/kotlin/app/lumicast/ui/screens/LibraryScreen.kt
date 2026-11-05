@@ -6,6 +6,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.ui.graphics.Color
+import app.lumicast.ui.theme.LumiTheme
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.CircleShape
@@ -156,7 +159,7 @@ fun LibraryScreen(
                         Text(
                             it,
                             style = MaterialTheme.typography.bodySmall,
-                            color = if (castConnecting) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.tertiary,
+                            color = if (castConnecting) MaterialTheme.colorScheme.onSurfaceVariant else LumiTheme.extras.ok,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -206,6 +209,12 @@ fun LibraryScreen(
             placeholder = { Text(if (openChat == null && openFolder == null) "Buscar chat ou pasta" else "Buscar vídeo") },
             singleLine = true,
             shape = CircleShape,
+            colors = OutlinedTextFieldDefaults.colors( // campo cheio, sem contorno: igual à prévia
+                unfocusedBorderColor = Color.Transparent,
+                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+            ),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
         )
 
