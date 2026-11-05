@@ -186,7 +186,7 @@ fun QueueSection(
             tv == null -> Text("Escolha uma TV acima para começar.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             else -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 // Tocando agora: a fila já anda sozinha; o botão só aparece para começar do zero.
-                if (!playing) Button(onClick = { onStart(tv, null) }, modifier = Modifier.weight(1f)) { Text("Iniciar na ${tv.name}") }
+                if (!playing) Button(onClick = { onStart(tv, null) }, modifier = Modifier.weight(1f)) { Text("Iniciar na ${tv.name}", maxLines = 1, overflow = TextOverflow.Ellipsis) }
                 OutlinedButton(onClick = { picking = true }) { Text("Agendar") }
             }
         }
