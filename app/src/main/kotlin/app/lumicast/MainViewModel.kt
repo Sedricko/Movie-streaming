@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import app.lumicast.data.library.SavedVideoSource
 import app.lumicast.data.library.VideoConverter
 import android.net.Uri
+import app.lumicast.data.library.findInDownloads
 import app.lumicast.data.library.saveToDownloads
 import app.lumicast.data.cast.renderConnectedSplash
 import app.lumicast.data.stream.BytesSource
@@ -344,6 +345,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         it.close()
                         done++
                         return@forEachIndexed // já está na galeria: não baixar de novo
+                    }
+                    // O app pode ter esquecido que salvou (reinstalou, limpou dados): confere o arquivo em Downloads antes de baixar.
+                    val existing = withContext(Dispatchers.IO) { runCatching { findInDownloads(getApplication(), name, video.title, video.mimeType, video.sizeBytes) }.getOrNull() }
+                    if (existing != null) {
+                        accountPrefs.edit().putString(savedKey(video), existing).apply()
+                        Diag.log("download", "file=${video.fileId} já existe em Downloads/Lumicast/$name: não baixou de novo")
+                        done++
+                        return@forEachIndexed
                     }
                     runCatching {
                         val path = withDownloadProgress(video, { f -> _downloadStatus.update { it?.copy(fraction = f) } }) { telegram.download(video) }

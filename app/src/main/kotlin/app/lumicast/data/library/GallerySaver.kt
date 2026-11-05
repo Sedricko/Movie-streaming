@@ -1,5 +1,6 @@
 package app.lumicast.data.library
 
+import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
@@ -23,6 +24,30 @@ internal fun safeFileName(title: String, mimeType: String = ""): String {
 }
 
 internal fun safeFolderName(name: String) = name.replace(Regex("""[\\/:*?"<>|\n\r]"""), "_").trim().trimStart('.').ifBlank { "Pasta" }.take(60)
+
+/**
+ * O arquivo já está em Downloads/Lumicast/<pasta> (mesmo nome e tamanho)? Devolve a Uri ou null. Vale mesmo quando o app
+ * perdeu a lembrança de ter salvado (reinstalou, limpou dados): sem isso baixava de novo e o Android criava "nome (1).mp4".
+ */
+fun findInDownloads(context: Context, folder: String, title: String, mimeType: String, size: Long): String? {
+    val name = safeFileName(title, mimeType)
+    val sub = "Lumicast/${safeFolderName(folder)}"
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+        val f = File(File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), sub), name)
+        return f.takeIf { it.isFile && (size <= 0 || it.length() == size) }?.let { Uri.fromFile(it).toString() }
+    }
+    val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
+    context.contentResolver.query(
+        collection,
+        arrayOf(MediaStore.MediaColumns._ID, MediaStore.MediaColumns.SIZE),
+        "${MediaStore.MediaColumns.DISPLAY_NAME}=? AND ${MediaStore.MediaColumns.RELATIVE_PATH}=? AND ${MediaStore.MediaColumns.IS_PENDING}=0",
+        arrayOf(name, "${Environment.DIRECTORY_DOWNLOADS}/$sub/"),
+        null,
+    )?.use { c ->
+        while (c.moveToNext()) if (size <= 0 || c.getLong(1) == size) return ContentUris.withAppendedId(collection, c.getLong(0)).toString()
+    }
+    return null
+}
 
 /** Copia o vídeo baixado para Downloads/Lumicast/<pasta> (aparece na galeria). Devolve a Uri do arquivo salvo. */
 fun saveToDownloads(context: Context, src: File, folder: String, title: String, mimeType: String): String {
