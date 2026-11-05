@@ -215,10 +215,17 @@ class TdlibTelegramGateway(context: Context, private val dbDirName: String) : Te
     }
 
     override suspend fun download(video: TgVideo): String {
-        // Se o mesmo vídeo também está sendo transmitido, a TV reposiciona o download (seek) e esta chamada volta com o arquivo
-        // incompleto. O TDLib guarda as partes baixadas: pedir de novo continua de onde parou, então tentamos algumas vezes.
+        // Se o mesmo vídeo também está sendo transmitido, o TDLib cancela este pedido ("Canceled by another downloadFile request",
+        // visto no diagnóstico) ou devolve o arquivo incompleto. Ele guarda as partes baixadas: pedir de novo continua de onde parou.
         repeat(DOWNLOAD_TRIES) { n ->
-            val file = send(TdApi.DownloadFile(video.fileId, 1, 0, 0, true)) as TdApi.File
+            val file = try {
+                send(TdApi.DownloadFile(video.fileId, 1, 0, 0, true)) as TdApi.File
+            } catch (e: TdException) {
+                if (!e.message.orEmpty().contains("cancel", ignoreCase = true)) throw e
+                Diag.log("download", "file=${video.fileId}: cancelado por outro pedido do mesmo arquivo (tentativa ${n + 1} de $DOWNLOAD_TRIES), pedindo de novo")
+                delay(1_000)
+                return@repeat
+            }
             if (file.local.isDownloadingCompleted) return file.local.path
             Diag.log("download", "file=${video.fileId}: voltou incompleto (tentativa ${n + 1} de $DOWNLOAD_TRIES), pedindo o resto")
             delay(500)
@@ -333,7 +340,7 @@ class TdlibTelegramGateway(context: Context, private val dbDirName: String) : Te
     private companion object {
         const val CHAT_LIMIT = 2_000
         const val STREAM_PRIORITY = 32
-        const val DOWNLOAD_TRIES = 4
+        const val DOWNLOAD_TRIES = 6
         const val TAIL_BYTES = 4L * 1024 * 1024
         const val TAIL_TIMEOUT_MS = 8_000L
         const val READ_TIMEOUT_MS = 30_000L

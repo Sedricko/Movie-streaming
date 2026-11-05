@@ -224,11 +224,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * Confere se os arquivos do histórico de downloads ainda existem e esquece os que sumiram (apagados pelo gerenciador de
      * arquivos, por exemplo). Sem isso o selo "Baixado" e a fila ficariam mentindo. Roda ao abrir o app e ao voltar para ele.
      */
-    fun refreshSaved() = viewModelScope.launch {
+    private var refreshing: Job? = null
+
+    fun refreshSaved() {
+        if (refreshing?.isActive == true) return // abrir o app chama duas vezes (init e onStart)
+        refreshing = viewModelScope.launch { doRefreshSaved() }
+    }
+
+    private suspend fun doRefreshSaved() {
         val stale = withContext(Dispatchers.IO) {
             accountPrefs.all.filter { (k, v) -> k.startsWith("saved:") && v is String && !savedExists(getApplication(), v) }.keys.toList()
         }
-        if (stale.isEmpty()) return@launch
+        if (stale.isEmpty()) return
         accountPrefs.edit().apply { stale.forEach { remove(it) } }.apply()
         _savedKeys.update { it - stale.map { k -> k.removePrefix("saved:") }.toSet() }
         Diag.log("download", "${stale.size} download(s) do histórico não existem mais em Downloads: esquecidos")
