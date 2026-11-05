@@ -45,6 +45,17 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        Diag.watch(true)
+    }
+
+    override fun onStop() {
+        Diag.watch(false)
+        Diag.flush() // guarda a sessão: se o Android matar o app em segundo plano, o relatório seguinte ainda a mostra
+        super.onStop()
+    }
+
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val up = event.keyCode == KeyEvent.KEYCODE_VOLUME_UP
         if ((up || event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) && event.action == KeyEvent.ACTION_DOWN && vm.nudgeVolume(up)) return true

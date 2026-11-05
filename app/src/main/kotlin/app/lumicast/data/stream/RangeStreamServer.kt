@@ -80,7 +80,11 @@ class RangeStreamServer(
             return
         }
         val size = source.sizeBytes
-        Diag.log("server", "${if (headOnly) "HEAD" else "GET"} range=${call.request.headers[HttpHeaders.Range]} de ${call.request.local.remoteAddress}")
+        val client = call.request.local.remoteAddress
+        val range = call.request.headers[HttpHeaders.Range]
+        Diag.log("server", "${if (headOnly) "HEAD" else "GET"} range=$range de $client")
+        if (Diag.first("cliente:$client")) Diag.metric("server.clientes_distintos", 1)
+        val who = "$client ${range ?: "tudo"}"
         call.response.header(HttpHeaders.AcceptRanges, "bytes")
         call.response.header(HttpHeaders.AccessControlAllowOrigin, "*")
         call.response.header("transferMode.dlna.org", "Streaming")
@@ -91,11 +95,20 @@ class RangeStreamServer(
                 call.response.header(HttpHeaders.ContentRange, "bytes */$size")
                 call.respond(HttpStatusCode.RequestedRangeNotSatisfiable)
             }
-            RangeResult.Full -> call.respond(SourceContent(source, 0, size - 1, size, partial = false, headOnly))
-            is RangeResult.Partial -> call.respond(SourceContent(source, r.start, r.end, size, partial = true, headOnly))
+            RangeResult.Full -> call.respond(SourceContent(source, 0, size - 1, size, partial = false, headOnly, who))
+            is RangeResult.Partial -> {
+                // MP4 com o índice no fim: a TV pede o final antes de tocar e o download sequencial tem que pular para lá
+                if (!headOnly && size > TAIL_BYTES * 4 && r.start >= size - TAIL_BYTES) {
+                    Diag.metric("server.pedido_final", 1)
+                    Diag.log("server", "$client pediu o final do arquivo (a partir de ${r.start} de $size): índice do MP4 no fim?")
+                }
+                call.respond(SourceContent(source, r.start, r.end, size, partial = true, headOnly, who))
+            }
         }
     }
 }
+
+private const val TAIL_BYTES = 4L * 1024 * 1024
 
 private class SourceContent(
     private val source: StreamSource,
@@ -104,6 +117,7 @@ private class SourceContent(
     private val total: Long,
     private val partial: Boolean,
     private val headOnly: Boolean,
+    private val who: String,
 ) : OutgoingContent.WriteChannelContent() {
 
     override val contentLength: Long = if (total == 0L) 0L else end - start + 1
@@ -140,10 +154,12 @@ private class SourceContent(
             // !finished = TV fechou a conexão (seek costuma fazer isso) ou a fonte falhou
             val sent = pos - start
             val ms = ((System.nanoTime() - t0) / 1_000_000).coerceAtLeast(1)
+            val pct = waitedMs * 100 / ms
             Diag.metric("server.kb_enviados", sent / 1024)
-            Diag.metric("server.kb_por_s", sent / 1024 * 1000 / ms)
-            Diag.metric("server.espera_pct", waitedMs * 100 / ms)
+            if (sent >= 256 * 1024) Diag.metric("server.kb_por_s", sent / 1024 * 1000 / ms) // respostas minúsculas dariam vazão falsa
+            Diag.metric("server.espera_pct", pct)
             if (!finished) Diag.metric("server.respostas_interrompidas", 1)
+            Diag.log("server", "fim $who: ${sent / 1024} KB em $ms ms, espera $pct% — ${if (finished) "ok" else "CORTADA"}")
         }
     }
 }

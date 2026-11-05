@@ -276,6 +276,7 @@ class TdlibTelegramGateway(context: Context, private val dbDirName: String) : Te
                     val now = System.currentTimeMillis()
                     if (!downloadReaches(offset) && now - lastMoveAt > MOVE_COOLDOWN_MS) {
                         lastMoveAt = now
+                        Diag.metric("stream.reposicionamentos", 1)
                         Diag.log("stream", "file=$fileId: baixar a partir de $offset (seek ou download parado)")
                         runCatching { send(TdApi.DownloadFile(fileId, STREAM_PRIORITY, offset, 0, false)) }
                     }
