@@ -69,6 +69,7 @@ private val SWITCH_OPTIONS = listOf(0 to "Ao terminar", 5 to "5 min", 10 to "10 
 @Composable
 fun QueueSection(
     queue: List<TgVideo>,
+    queueNote: (TgVideo) -> String?,
     tv: CastDevice?,
     playing: Boolean,
     scheduledAt: Long?,
@@ -154,7 +155,12 @@ fun QueueSection(
                 Icon(Icons.Rounded.DragIndicator, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 Column(Modifier.weight(1f).padding(start = 8.dp)) {
                     Text("${i + 1}. ${video.title}", style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(formatDuration(video.durationSec), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    val note = queueNote(video)
+                    Text(
+                        formatDuration(video.durationSec) + (note?.let { " • $it" } ?: ""),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (note?.startsWith("Já tocou") == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
                 IconButton(onClick = { onRemove(i) }) { Icon(Icons.Rounded.Close, "Tirar ${video.title} da fila") }
             }

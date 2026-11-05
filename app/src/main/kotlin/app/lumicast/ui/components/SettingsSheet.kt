@@ -68,7 +68,7 @@ fun SettingsSheet(
             ) { onChange(settings.copy(autoConvert = it)) }
             SettingSwitch(
                 "Baixar a fila adiante",
-                "Com a fila tocando, o celular baixa os próximos vídeos na ordem da fila, até o último, para cada um começar pronto. Usa espaço e dados.",
+                "Com a fila tocando, o celular baixa os próximos vídeos na ordem da fila, até o último, e salva em Downloads/Lumicast/Fila. O vídeo só sai da fila depois de baixado. Usa espaço e dados.",
                 settings.prefetch,
             ) { onChange(settings.copy(prefetch = it)) }
             SettingSwitch(

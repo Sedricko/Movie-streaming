@@ -218,6 +218,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         viewModelScope.launch {
+            _played.drop(1).collect { accountPrefs.edit().putStringSet("queuePlayed", it).apply() }
+        }
+        viewModelScope.launch {
             _queue.drop(1).collect { accountPrefs.edit().putString("queue", encodeFolders(listOf(VideoFolder("queue", "queue", it)))).apply() }
         }
     }
@@ -382,24 +385,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     current = video
                     _downloadStatus.value = Transfer("Baixando ${i + 1} de ${videos.size}", video.title, 0f)
                     if (i == 0) TransferService.start(getApplication())
-                    savedSource(video)?.let {
-                        it.close()
-                        done++
-                        return@forEachIndexed // já está na galeria: não baixar de novo
-                    }
-                    // O app pode ter esquecido que salvou (reinstalou, limpou dados): confere o arquivo em Downloads antes de baixar.
-                    val existing = withContext(Dispatchers.IO) { runCatching { findInDownloads(getApplication(), name, video.title, video.mimeType, video.sizeBytes) }.getOrNull() }
-                    if (existing != null) {
-                        rememberSaved(video, existing)
-                        Diag.log("download", "file=${video.fileId} já existe em Downloads/Lumicast/$name: não baixou de novo")
-                        done++
-                        return@forEachIndexed
-                    }
                     runCatching {
-                        val path = withDownloadProgress(video, { f -> _downloadStatus.update { it?.copy(fraction = f) } }) { telegram.download(video) }
-                        val uri = withContext(Dispatchers.IO) { saveToDownloads(getApplication(), File(path), name, video.title, video.mimeType) }
-                        accountPrefs.edit().putString(savedKey(video), uri).apply()
-                        if (streaming?.first?.fileId != video.fileId && previewing?.first?.fileId != video.fileId) telegram.releaseLocal(video)
+                        saveVideo(video, name) { f -> _downloadStatus.update { it?.copy(fraction = f) } }
                         done++
                     }.onFailure {
                         if (it is CancellationException) throw it
@@ -418,6 +405,25 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 _downloadStatus.value = null
             }
         }
+    }
+
+    /**
+     * Garante o vídeo em Downloads/Lumicast/[folder] e só devolve com certeza: já salvo (e o arquivo abre), já está lá
+     * (nome e tamanho) ou baixou e salvou agora. Qualquer falha lança exceção, e o vídeo segue como "não baixado".
+     */
+    private suspend fun saveVideo(video: TgVideo, folder: String, onFraction: (Float) -> Unit = {}) {
+        savedSource(video)?.let { it.close(); return }
+        // O app pode ter esquecido que salvou (reinstalou, limpou dados): confere o arquivo em Downloads antes de baixar.
+        val existing = withContext(Dispatchers.IO) { runCatching { findInDownloads(getApplication(), folder, video.title, video.mimeType, video.sizeBytes) }.getOrNull() }
+        if (existing != null) {
+            rememberSaved(video, existing)
+            Diag.log("download", "file=${video.fileId} já existe em Downloads/Lumicast/$folder: não baixou de novo")
+            return
+        }
+        val path = withDownloadProgress(video, onFraction) { telegram.download(video) }
+        val uri = withContext(Dispatchers.IO) { saveToDownloads(getApplication(), File(path), folder, video.title, video.mimeType) }
+        rememberSaved(video, uri)
+        if (streaming?.first?.fileId != video.fileId && previewing?.first?.fileId != video.fileId) telegram.releaseLocal(video)
     }
 
     fun enqueue(video: TgVideo) = enqueueAll(listOf(video))
@@ -475,7 +481,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             seekTo(_trimStart.value)
             return
         }
-        current?.let { _queue.value = listOf(it) + _queue.value }
+        current?.let { c ->
+            val k = keyOf(c)
+            if (_queue.value.any { keyOf(it) == k }) _played.update { it - k } else _queue.value = listOf(c) + _queue.value
+        }
         castTo(prev, device)
     }
 
@@ -491,6 +500,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         scheduleJob = viewModelScope.launch {
             atMillis?.let { delay(it - System.currentTimeMillis()) }
             _scheduledAt.value = null
+            if (!hasPlayable()) _played.value = emptySet() // só sobraram os que já tocaram: recomeça do primeiro
             playNext(device)
         }
     }
@@ -502,7 +512,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Terminou um vídeo: próximo da fila; sem fila, próximo episódio (se ligado); senão para ou fica onde está. */
     private fun advance(device: CastDevice, stopIfNothing: Boolean) {
-        if (_queue.value.isNotEmpty()) return playNext(device)
+        if (hasPlayable()) return playNext(device)
         val next = if (_settings.value.autoNext) nextEpisode() else null
         when {
             next != null -> {
@@ -526,8 +536,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun playNext(device: CastDevice) {
-        val next = _queue.value.firstOrNull() ?: return
-        _queue.value = _queue.value.drop(1)
+        val next = _queue.value.firstOrNull { keyOf(it) !in _played.value } ?: return
+        // Só sai da fila com certeza de que está baixado (o arquivo abre); senão toca e fica, marcado como "já tocou".
+        val certain = savedSource(next)?.also { it.close() } != null
+        if (certain) _queue.update { q -> q.filterNot { keyOf(it) == keyOf(next) } } else _played.update { it + keyOf(next) }
         cast.playback.value.video?.let { history.addLast(it) }
         castTo(next, device)
     }
@@ -761,7 +773,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (_selectedTvId.value != device.id) rememberTv(device)
         switchJob?.cancel()
         val every = _switchEveryMin.value
-        if (every > 0 && _queue.value.isNotEmpty()) {
+        if (every > 0 && hasPlayable()) {
             switchJob = viewModelScope.launch { delay(every * 60_000L); playNext(device) }
         }
         if (!container.realMode) {
@@ -832,7 +844,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /**
      * Com a fila tocando, baixa os vídeos dela na ordem de transmissão, do próximo até o último, para cada um
      * começar pronto. Espera o vídeo em transmissão terminar de baixar (ele tem prioridade) e relê a fila a cada
-     * passo: o que o usuário acrescenta ou tira entra na ordem. Fica no cache do Telegram, não na galeria.
+     * passo: o que o usuário acrescenta ou tira entra na ordem. Salva em Downloads/Lumicast/Fila: é essa confirmação que deixa o vídeo sair da fila.
      */
     private fun startPrefetch() {
         if (!container.realMode || !_settings.value.prefetch || prefetchJob?.isActive == true || streaming == null) return
@@ -842,9 +854,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 while ((streamSource?.downloadedFraction ?: 1f) < 1f) delay(2_000)
                 val video = _queue.value.firstOrNull { it.fileId !in tried } ?: break
                 tried += video.fileId
-                if (savedSource(video)?.also { it.close() } != null) continue // já está na galeria
                 val t0 = System.nanoTime()
-                runCatching { withDownloadProgress(video, {}) { telegram.download(video) } }
+                runCatching { saveVideo(video, "Fila") }
                     .onSuccess {
                         val ms = (System.nanoTime() - t0) / 1_000_000
                         Diag.metric("prefetch.ms", ms)

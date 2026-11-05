@@ -53,6 +53,7 @@ fun TvScreen(
     onVolume: (Float) -> Unit,
     onSpeed: (Float) -> Unit,
     queue: List<TgVideo>,
+    queueNote: (TgVideo) -> String?,
     scheduledAt: Long?,
     switchEveryMin: Int,
     trimStart: Int,
@@ -104,6 +105,7 @@ fun TvScreen(
 
         QueueSection(
             queue = queue,
+            queueNote = queueNote,
             tv = tv,
             playing = playback.video != null,
             scheduledAt = scheduledAt,

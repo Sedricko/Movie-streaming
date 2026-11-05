@@ -78,6 +78,8 @@ fun MainScreen(vm: MainViewModel) {
     val pinned by vm.pinned.collectAsStateWithLifecycle()
     val previewUrl by vm.previewUrl.collectAsStateWithLifecycle()
     val queue by vm.queue.collectAsStateWithLifecycle()
+    val played by vm.queuePlayed.collectAsStateWithLifecycle()
+    val saved by vm.savedKeys.collectAsStateWithLifecycle()
     val folders by vm.folders.collectAsStateWithLifecycle()
     val openFolder by vm.openFolder.collectAsStateWithLifecycle()
     val downloadStatus by vm.downloadStatus.collectAsStateWithLifecycle()
@@ -209,7 +211,11 @@ fun MainScreen(vm: MainViewModel) {
                     onStop = vm::stop,
                     onPrevious = vm::previous,
                     onNext = vm::next,
-                    canSkipNext = queue.isNotEmpty() || settings.autoNext,
+                    canSkipNext = queue.any { "${it.chatId}:${it.messageId}" !in played } || settings.autoNext,
+                    queueNote = { v ->
+                        val k = "${v.chatId}:${v.messageId}"
+                        when { k in played -> "Já tocou · falta baixar"; k in saved -> "Baixado"; else -> null }
+                    },
                     onVolume = vm::setVolume,
                     onSpeed = vm::setSpeed,
                     queue = queue,
