@@ -86,6 +86,8 @@ data class AppSettings(
     val autoConvert: Boolean = true,
     /** Ao escolher a TV (e quando a fila acaba), mostrar nela a tela "Lumicast conectado". */
     val showSplash: Boolean = true,
+    /** Com a fila tocando, baixar os próximos vídeos na ordem da fila, até o último, para cada um começar pronto. */
+    val prefetch: Boolean = true,
     val theme: ThemeMode = ThemeMode.System,
     /** Tamanho máximo do cache do Telegram em GB (0 = sem limite). O excesso é apagado ao parar de transmitir. */
     val cacheLimitGb: Int = 0,

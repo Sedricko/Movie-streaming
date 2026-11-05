@@ -67,6 +67,11 @@ fun SettingsSheet(
                 settings.autoConvert,
             ) { onChange(settings.copy(autoConvert = it)) }
             SettingSwitch(
+                "Baixar a fila adiante",
+                "Com a fila tocando, o celular baixa os próximos vídeos na ordem da fila, até o último, para cada um começar pronto. Usa espaço e dados.",
+                settings.prefetch,
+            ) { onChange(settings.copy(prefetch = it)) }
+            SettingSwitch(
                 "Mostrar o logo na TV ao conectar",
                 "Ao escolher a TV, ela mostra “Lumicast conectado” até você mandar um vídeo, e volta a mostrar quando a fila acaba.",
                 settings.showSplash,

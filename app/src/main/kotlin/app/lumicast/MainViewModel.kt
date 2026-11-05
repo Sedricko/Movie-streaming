@@ -117,6 +117,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             volumeKeys = prefs.getBoolean("set.volumeKeys", true),
             autoConvert = prefs.getBoolean("set.autoConvert", true),
             showSplash = prefs.getBoolean("set.showSplash", true),
+            prefetch = prefs.getBoolean("set.prefetch", true),
             cacheLimitGb = prefs.getInt("set.cacheLimitGb", 0),
             theme = runCatching { ThemeMode.valueOf(prefs.getString("set.theme", null)!!) }.getOrDefault(ThemeMode.System),
         ),
@@ -129,7 +130,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         prefs.edit()
             .putBoolean("set.resume", new.resume).putBoolean("set.autoNext", new.autoNext)
             .putBoolean("set.dlna", new.dlna).putBoolean("set.volumeKeys", new.volumeKeys)
-            .putBoolean("set.autoConvert", new.autoConvert)
+            .putBoolean("set.autoConvert", new.autoConvert).putBoolean("set.prefetch", new.prefetch)
             .putBoolean("set.showSplash", new.showSplash).putString("set.theme", new.theme.name)
             .putInt("set.cacheLimitGb", new.cacheLimitGb)
             .commit() // commit: o MultiCastGateway lê "set.dlna" logo em seguida
@@ -373,6 +374,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun enqueueAll(videos: List<TgVideo>) {
         _queue.value += videos
+        startPrefetch() // fila nova com algo tocando: o laço pega os acrescentados
         val what = if (videos.size == 1) "Adicionado" else "${videos.size} vídeos adicionados"
         Toast.makeText(getApplication(), "$what à fila (${_queue.value.size} no total).", Toast.LENGTH_SHORT).show()
     }
@@ -726,6 +728,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             cast.play(device, video.copy(mimeType = source.mimeType, sizeBytes = source.sizeBytes), url, imageUrl = thumbnailUrl(video))
             Diag.metric("tv.ms_ate_enviar", (System.nanoTime() - t0) / 1_000_000) // clique → TV recebeu a URL
             Diag.log("vm", "transmitindo file=${video.fileId} (${video.mimeType}, ${video.sizeBytes} B) em ${device.protocol}")
+            startPrefetch()
         }.onFailure {
             endStream()
             toast(it)
@@ -774,6 +777,37 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    private var prefetchJob: Job? = null
+
+    /**
+     * Com a fila tocando, baixa os vídeos dela na ordem de transmissão, do próximo até o último, para cada um
+     * começar pronto. Espera o vídeo em transmissão terminar de baixar (ele tem prioridade) e relê a fila a cada
+     * passo: o que o usuário acrescenta ou tira entra na ordem. Fica no cache do Telegram, não na galeria.
+     */
+    private fun startPrefetch() {
+        if (!container.realMode || !_settings.value.prefetch || prefetchJob?.isActive == true || streaming == null) return
+        prefetchJob = viewModelScope.launch {
+            val tried = HashSet<Int>()
+            while (true) {
+                while ((streamSource?.downloadedFraction ?: 1f) < 1f) delay(2_000)
+                val video = _queue.value.firstOrNull { it.fileId !in tried } ?: break
+                tried += video.fileId
+                if (savedSource(video)?.also { it.close() } != null) continue // já está na galeria
+                val t0 = System.nanoTime()
+                runCatching { withDownloadProgress(video, {}) { telegram.download(video) } }
+                    .onSuccess {
+                        val ms = (System.nanoTime() - t0) / 1_000_000
+                        Diag.metric("prefetch.ms", ms)
+                        Diag.log("prefetch", "file=${video.fileId} baixado em ${ms / 1000}s (${tried.size} de ${tried.size + _queue.value.count { v -> v.fileId !in tried }} da fila)")
+                    }
+                    .onFailure {
+                        if (it is CancellationException) throw it
+                        Diag.log("prefetch", "falhou file=${video.fileId}: ${it.message}") // segue para o próximo; este baixa ao tocar
+                    }
+            }
+        }
+    }
+
     private suspend fun endStream() {
         progressJob?.cancel()
         downloaded.value = null
@@ -790,7 +824,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val convertedDir get() = File(getApplication<Application>().cacheDir, "convertidos")
 
     /** Nada usando o cache agora? (limpar no meio de uma transmissão ou download quebraria o vídeo) */
-    private fun cacheIdle() = streaming == null && previewing == null && downloadJob?.isActive != true && convertJob?.isActive != true
+    private fun cacheIdle() = streaming == null && previewing == null && prefetchJob?.isActive != true && downloadJob?.isActive != true && convertJob?.isActive != true
 
     fun refreshStorage() = viewModelScope.launch {
         val converted = withContext(Dispatchers.IO) { convertedDir.walkTopDown().filter { it.isFile }.sumOf { it.length() } }
@@ -828,6 +862,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun stop() = viewModelScope.launch {
         convertJob?.cancel()
         switchJob?.cancel()
+        prefetchJob?.cancel()
         queueDevice = null // parar à mão não puxa o próximo da fila
         cast.stop()
         endStream()
