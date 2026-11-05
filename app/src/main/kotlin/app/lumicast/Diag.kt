@@ -88,12 +88,14 @@ object Diag {
         val moves = count("stream.reposicionamentos")
         val freeze = max("ui.travamento_ms")
         val errors = count("eventos.erro")
+        val stalls = count("tv.paradas")
         fun na(v: Any?, f: () -> String) = if (v == null) "—" else f()
         return listOf(
             Health("Vazão para a TV", na(kbs) { "%.1f MB/s".format(Locale.ROOT, kbs!! / 1024.0) }, level(kbs, 2000.0, 500.0, lowIsBad = true)),
             Health("Espera pelo download", na(wait) { "$wait%" }, level(wait, 30.0, 60.0)),
             Health("Clique até a TV", na(toTv) { "%.1f s".format(Locale.ROOT, toTv!! / 1000.0) }, level(toTv, 3000.0, 6000.0)),
             Health("Conexões cortadas", "$cut", level(cut, 2.0, 5.0)),
+            Health("Paradas da TV", "$stalls", level(stalls, 0.0, 2.0)),
             Health("Reposicionamentos", "$moves", level(moves, 3.0, 6.0)),
             Health("Travamento da tela", na(freeze) { "${freeze}ms" }, level(freeze, 1000.0, 5000.0)),
             Health("Erros", "$errors", if (errors > 0) Level.Bad else Level.Ok),
@@ -112,6 +114,8 @@ object Diag {
         if (count("server.clientes_distintos") > 1) add("Mais de um aparelho puxou o vídeo ao mesmo tempo (veja os IPs em [server]).")
         if (count("server.respostas_interrompidas") > 2) add("A TV fechou várias conexões: normal em seek, suspeito se o vídeo não toca.")
         if ((max("ui.travamento_ms") ?: 0) > 1000) add("A tela travou mais de 1 s: veja [travamento] nos eventos, tem a pilha de chamadas.")
+        if (count("tv.paradas") > 0) add("A transmissão parou ${count("tv.paradas")}x com o app mostrando \"tocando\": veja [parada] nos eventos (causa provável e tentativa de retomar).")
+        if (count("stream.leituras_esgotadas") > 0) add("O download ficou 30 s sem dados e o servidor desistiu da resposta: a TV recebeu o vídeo incompleto.")
         if (count("eventos.erro") > 0) add("Houve erros: veja [erro] nos eventos.")
     }
 

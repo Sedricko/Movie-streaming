@@ -14,6 +14,7 @@ import app.lumicast.data.stream.BytesSource
 import app.lumicast.domain.StorageInfo
 import app.lumicast.domain.ThemeMode
 import app.lumicast.data.stream.RangeStreamServer
+import app.lumicast.data.stream.StreamActivity
 import app.lumicast.data.stream.findLanIPv4
 import app.lumicast.domain.Account
 import app.lumicast.domain.AppSettings
@@ -721,13 +722,55 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val (url, source) = serve(video)
             streaming = video to url
             streamSource = source
-            progressJob = viewModelScope.launch { while (true) { downloaded.value = source.downloadedFraction; delay(1_000) } }
+            progressJob = viewModelScope.launch { watchStream(source) }
             cast.play(device, video.copy(mimeType = source.mimeType, sizeBytes = source.sizeBytes), url, imageUrl = thumbnailUrl(video))
             Diag.metric("tv.ms_ate_enviar", (System.nanoTime() - t0) / 1_000_000) // clique → TV recebeu a URL
             Diag.log("vm", "transmitindo file=${video.fileId} (${video.mimeType}, ${video.sizeBytes} B) em ${device.protocol}")
         }.onFailure {
             endStream()
             toast(it)
+        }
+    }
+
+    /**
+     * Atualiza o progresso do download e vigia a transmissão: o celular e a notificação do Cast seguem mostrando
+     * "tocando" mesmo quando a TV parou (download do Telegram sem dados, TV sem pedir bytes). Registra a causa e
+     * tenta retomar com um seek na posição atual, que obriga a TV a pedir o trecho de novo.
+     */
+    private suspend fun watchStream(source: StreamSource) {
+        var lastPos = -1
+        var lastStatus: PlayStatus? = null
+        var posSince = System.currentTimeMillis()
+        var lastDl = -1f
+        var dlSince = posSince
+        var tries = 0
+        while (true) {
+            val now = System.currentTimeMillis()
+            val dl = source.downloadedFraction
+            downloaded.value = dl
+            if (dl != lastDl) { lastDl = dl; dlSince = now }
+            val p = cast.playback.value
+            if (p.positionSec != lastPos || p.status != lastStatus) { lastPos = p.positionSec; lastStatus = p.status; posSince = now }
+            val limit = if (p.status == PlayStatus.Playing) 10_000 else 20_000 // abrir um vídeo grande demora mais que travar no meio
+            if ((p.status == PlayStatus.Playing || p.status == PlayStatus.Buffering) && now - posSince > limit) {
+                val noData = dl < 1f && now - dlSince > limit
+                val idle = StreamActivity.lastByteAt.let { if (it == 0L) -1L else now - it }
+                Diag.metric("tv.paradas", 1)
+                Diag.log(
+                    "parada",
+                    "TV ${p.status} sem avançar há ${(now - posSince) / 1000}s em ${p.positionSec}s · download ${(dl * 100).toInt()}% " +
+                        "(${if (noData) "PARADO há ${(now - dlSince) / 1000}s" else "andando"}) · respostas abertas ${StreamActivity.active.get()} · " +
+                        "último byte servido há ${if (idle < 0) "nunca" else "${idle / 1000}s"} · causa provável: " +
+                        if (noData) "download do Telegram parado" else if (StreamActivity.active.get() == 0) "a TV não está pedindo dados" else "a TV está lendo devagar",
+                )
+                if (tries < 3) {
+                    tries++
+                    Diag.log("parada", "tentativa $tries de retomar: seek em ${p.positionSec}s")
+                    runCatching { cast.seekTo(p.positionSec) }.onFailure { Diag.log("parada", "seek falhou: ${it.message}") }
+                }
+                posSince = now // próxima verificação só daqui a [limit]
+            }
+            delay(1_000)
         }
     }
 

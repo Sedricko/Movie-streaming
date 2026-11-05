@@ -108,6 +108,12 @@ class RangeStreamServer(
     }
 }
 
+/** Atividade do servidor, lida pelo vigia da transmissão: respostas abertas e quando saiu o último byte. */
+object StreamActivity {
+    val active = java.util.concurrent.atomic.AtomicInteger()
+    @Volatile var lastByteAt = 0L
+}
+
 private const val TAIL_BYTES = 4L * 1024 * 1024
 
 private class SourceContent(
@@ -134,6 +140,7 @@ private class SourceContent(
         var waitedMs = 0L
         val t0 = System.nanoTime()
         var finished = false
+        StreamActivity.active.incrementAndGet()
         try {
             while (pos <= end) {
                 val want = minOf(buf.size.toLong(), end - pos + 1).toInt()
@@ -147,10 +154,12 @@ private class SourceContent(
                     break
                 }
                 channel.writeFully(buf, 0, n)
+                StreamActivity.lastByteAt = System.currentTimeMillis()
                 pos += n
             }
             finished = pos > end
         } finally {
+            StreamActivity.active.decrementAndGet()
             // !finished = TV fechou a conexão (seek costuma fazer isso) ou a fonte falhou
             val sent = pos - start
             val ms = ((System.nanoTime() - t0) / 1_000_000).coerceAtLeast(1)

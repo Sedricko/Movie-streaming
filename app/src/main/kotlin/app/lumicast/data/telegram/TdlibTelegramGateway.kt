@@ -283,7 +283,10 @@ class TdlibTelegramGateway(context: Context, private val dbDirName: String) : Te
                     withTimeoutOrNull(500) { fileUpdates.first { it == fileId } }
                 }
                 @Suppress("UNREACHABLE_CODE") -1
-            } ?: (-1).also { Diag.log("stream", "file=$fileId: tempo esgotado esperando bytes em $offset") }
+            } ?: (-1).also {
+                Diag.metric("stream.leituras_esgotadas", 1)
+                Diag.log("stream", "file=$fileId: tempo esgotado esperando bytes em $offset")
+            }
         }
 
         private suspend fun prefixAt(offset: Long): Long =
