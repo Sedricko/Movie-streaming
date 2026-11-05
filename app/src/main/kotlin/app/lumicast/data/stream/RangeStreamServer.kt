@@ -117,12 +117,33 @@ private class SourceContent(
         if (headOnly || total == 0L) return
         val buf = ByteArray(64 * 1024)
         var pos = start
-        while (pos <= end) {
-            val want = minOf(buf.size.toLong(), end - pos + 1).toInt()
-            val n = source.read(pos, buf, want)
-            if (n <= 0) break
-            channel.writeFully(buf, 0, n)
-            pos += n
+        var waitedMs = 0L
+        val t0 = System.nanoTime()
+        var finished = false
+        try {
+            while (pos <= end) {
+                val want = minOf(buf.size.toLong(), end - pos + 1).toInt()
+                val t = System.nanoTime()
+                val n = source.read(pos, buf, want)
+                val w = (System.nanoTime() - t) / 1_000_000
+                waitedMs += w
+                if (w > 1_000) Diag.log("gargalo", "leitura esperou $w ms em $pos: download mais lento que a reprodução")
+                if (n <= 0) {
+                    Diag.log("erro", "fonte acabou em $pos antes do fim ($end): arquivo incompleto ou download falhou")
+                    break
+                }
+                channel.writeFully(buf, 0, n)
+                pos += n
+            }
+            finished = pos > end
+        } finally {
+            // !finished = TV fechou a conexão (seek costuma fazer isso) ou a fonte falhou
+            val sent = pos - start
+            val ms = ((System.nanoTime() - t0) / 1_000_000).coerceAtLeast(1)
+            Diag.metric("server.kb_enviados", sent / 1024)
+            Diag.metric("server.kb_por_s", sent / 1024 * 1000 / ms)
+            Diag.metric("server.espera_pct", waitedMs * 100 / ms)
+            if (!finished) Diag.metric("server.respostas_interrompidas", 1)
         }
     }
 }

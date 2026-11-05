@@ -702,6 +702,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             cast.play(device, video, streamUrl = "http://demo.invalid/stream")
             return@launch
         }
+        val t0 = System.nanoTime()
         runCatching {
             endStream()
             val (url, source) = serve(video)
@@ -709,6 +710,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             streamSource = source
             progressJob = viewModelScope.launch { while (true) { downloaded.value = source.downloadedFraction; delay(1_000) } }
             cast.play(device, video.copy(mimeType = source.mimeType, sizeBytes = source.sizeBytes), url, imageUrl = thumbnailUrl(video))
+            Diag.metric("tv.ms_ate_enviar", (System.nanoTime() - t0) / 1_000_000) // clique → TV recebeu a URL
             Diag.log("vm", "transmitindo file=${video.fileId} (${video.mimeType}, ${video.sizeBytes} B) em ${device.protocol}")
         }.onFailure {
             endStream()
