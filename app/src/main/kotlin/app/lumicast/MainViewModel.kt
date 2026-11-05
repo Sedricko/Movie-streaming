@@ -31,6 +31,8 @@ import app.lumicast.domain.TgVideo
 import app.lumicast.domain.Transfer
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import app.lumicast.domain.VideoFolder
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -411,19 +413,24 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * Garante o vídeo em Downloads/Lumicast/[folder] e só devolve com certeza: já salvo (e o arquivo abre), já está lá
      * (nome e tamanho) ou baixou e salvou agora. Qualquer falha lança exceção, e o vídeo segue como "não baixado".
      */
+    private val saveLock = Mutex()
+
     private suspend fun saveVideo(video: TgVideo, folder: String, onFraction: (Float) -> Unit = {}) {
-        savedSource(video)?.let { it.close(); return }
-        // O app pode ter esquecido que salvou (reinstalou, limpou dados): confere o arquivo em Downloads antes de baixar.
-        val existing = withContext(Dispatchers.IO) { runCatching { findInDownloads(getApplication(), folder, video.title, video.mimeType, video.sizeBytes) }.getOrNull() }
-        if (existing != null) {
-            rememberSaved(video, existing)
-            Diag.log("download", "file=${video.fileId} já existe em Downloads/Lumicast/$folder: não baixou de novo")
-            return
+        // Um de cada vez, na ordem em que chegam: botão de baixar e "baixar adiante" juntos não salvam o mesmo vídeo duas vezes ("(1)").
+        saveLock.withLock {
+            savedSource(video)?.let { it.close(); return }
+            // O app pode ter esquecido que salvou (reinstalou, limpou dados): confere o arquivo em Downloads antes de baixar.
+            val existing = withContext(Dispatchers.IO) { runCatching { findInDownloads(getApplication(), folder, video.title, video.mimeType, video.sizeBytes) }.getOrNull() }
+            if (existing != null) {
+                rememberSaved(video, existing)
+                Diag.log("download", "file=${video.fileId} já existe em Downloads/Lumicast/$folder: não baixou de novo")
+                return
+            }
+            val path = withDownloadProgress(video, onFraction) { telegram.download(video) }
+            val uri = withContext(Dispatchers.IO) { saveToDownloads(getApplication(), File(path), folder, video.title, video.mimeType) }
+            rememberSaved(video, uri)
+            if (streaming?.first?.fileId != video.fileId && previewing?.first?.fileId != video.fileId) telegram.releaseLocal(video)
         }
-        val path = withDownloadProgress(video, onFraction) { telegram.download(video) }
-        val uri = withContext(Dispatchers.IO) { saveToDownloads(getApplication(), File(path), folder, video.title, video.mimeType) }
-        rememberSaved(video, uri)
-        if (streaming?.first?.fileId != video.fileId && previewing?.first?.fileId != video.fileId) telegram.releaseLocal(video)
     }
 
     fun enqueue(video: TgVideo) = enqueueAll(listOf(video))
