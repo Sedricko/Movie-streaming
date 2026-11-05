@@ -254,6 +254,7 @@ fun MainScreen(vm: MainViewModel) {
                     onDownloadQueue = vm::downloadQueue,
                     onClearQueue = vm::clearQueue,
                     onClearPlayed = vm::clearPlayed,
+                    onPlayQueueItem = vm::playFromQueue,
                     onSortQueue = vm::sortQueue,
                 )
             }

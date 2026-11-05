@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.DragIndicator
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -88,6 +89,7 @@ fun QueueSection(
     onDownloadQueue: () -> Unit,
     onClearQueue: () -> Unit,
     onClearPlayed: () -> Unit,
+    onPlayItem: (Int) -> Unit,
     onSort: (descending: Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -173,6 +175,7 @@ fun QueueSection(
                         color = if (note?.startsWith("Já tocou") == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                IconButton(onClick = { onPlayItem(i) }, enabled = tv != null) { Icon(Icons.Rounded.PlayArrow, "Tocar ${video.title} agora") }
                 IconButton(onClick = { onRemove(i) }) { Icon(Icons.Rounded.Close, "Tirar ${video.title} da fila") }
             }
         }

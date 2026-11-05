@@ -541,6 +541,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         castTo(prev, device)
     }
 
+    /** Toca agora o item [index] da fila, inclusive um que já tocou. Os de antes ficam "já tocou"; ele e os de depois seguem a ordem. */
+    fun playFromQueue(index: Int) {
+        val q = _queue.value
+        val video = q.getOrNull(index) ?: return
+        val device = queueDevice ?: cast.playback.value.device ?: selectedTv.value ?: return
+        _played.value = q.take(index + 1).map { keyOf(it) }.toSet()
+        cast.playback.value.video?.let { history.addLast(it) }
+        castTo(video, device)
+    }
+
     fun setSwitchEvery(minutes: Int) {
         _switchEveryMin.value = minutes
     }
@@ -702,6 +712,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** A TV recusou o formato: converte para MP4 (se ligado) e transmite o convertido na mesma TV. */
     private fun onFormatError(video: TgVideo) {
         val device = queueDevice ?: return
+        if (streaming?.first?.fileId != video.fileId) {
+            Diag.log("convert", "file=${video.fileId}: erro da TV de um vídeo que já não é o atual (troca rápida), ignorado")
+            return
+        }
         val msg = "A TV não aceitou o formato deste vídeo."
         when {
             !_settings.value.autoConvert -> Toast.makeText(getApplication(), "$msg Ligue \"Converter formato\" nas Configurações.", Toast.LENGTH_LONG).show()
@@ -771,6 +785,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun toast(t: Throwable) {
+        if (t is CancellationException) return // fechar o app ou trocar de vídeo cancela tarefas: não é erro
         Diag.log("erro", t.stackTraceToString().take(800))
         Toast.makeText(getApplication(), t.message ?: "Não foi possível abrir o vídeo. Tente de novo.", Toast.LENGTH_LONG).show()
     }
@@ -809,7 +824,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** TDLib (download progressivo) → servidor HTTP local na LAN → TV. No modo demonstração, só simula. */
-    fun castTo(original: TgVideo, device: CastDevice) = viewModelScope.launch {
+    private var castJob: Job? = null
+
+    fun castTo(original: TgVideo, device: CastDevice) {
+        castJob?.cancel() // toques rápidos em Próximo/Anterior/fila: só o último vale (empilhar derrubava a TV)
+        castJob = viewModelScope.launch { castToNow(original, device) }
+    }
+
+    private suspend fun castToNow(original: TgVideo, device: CastDevice) {
         convertJob?.cancel() // escolheu outro vídeo: esquecer a conversão em andamento
         val start = _trimStart.value
         val saved = _progress.value[keyOf(original)]
@@ -829,7 +851,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         if (!container.realMode) {
             cast.play(device, video, streamUrl = "http://demo.invalid/stream")
-            return@launch
+            return
         }
         val t0 = System.nanoTime()
         runCatching {
@@ -843,6 +865,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             Diag.log("vm", "transmitindo file=${video.fileId} (${video.mimeType}, ${video.sizeBytes} B) em ${device.protocol}")
             startPrefetch()
         }.onFailure {
+            if (it is CancellationException) throw it // trocaram de vídeo: não mexer no stream do novo
             endStream()
             toast(it)
         }
