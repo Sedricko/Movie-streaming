@@ -48,6 +48,7 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         Diag.watch(true)
+        vm.refreshSaved() // o usuário pode ter apagado downloads pelo gerenciador de arquivos
     }
 
     override fun onStop() {

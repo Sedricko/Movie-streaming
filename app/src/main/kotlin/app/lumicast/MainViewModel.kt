@@ -13,6 +13,7 @@ import app.lumicast.data.library.deleteSaved
 import app.lumicast.data.library.encodeFolders
 import app.lumicast.data.library.findInDownloads
 import app.lumicast.data.library.saveToDownloads
+import app.lumicast.data.library.savedExists
 import app.lumicast.data.cast.renderConnectedSplash
 import app.lumicast.data.stream.BytesSource
 import app.lumicast.domain.StorageInfo
@@ -214,6 +215,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun hasPlayable() = _queue.value.any { keyOf(it) !in _played.value }
 
+    /**
+     * Confere se os arquivos do histórico de downloads ainda existem e esquece os que sumiram (apagados pelo gerenciador de
+     * arquivos, por exemplo). Sem isso o selo "Baixado" e a fila ficariam mentindo. Roda ao abrir o app e ao voltar para ele.
+     */
+    fun refreshSaved() = viewModelScope.launch {
+        val stale = withContext(Dispatchers.IO) {
+            accountPrefs.all.filter { (k, v) -> k.startsWith("saved:") && v is String && !savedExists(getApplication(), v) }.keys.toList()
+        }
+        if (stale.isEmpty()) return@launch
+        accountPrefs.edit().apply { stale.forEach { remove(it) } }.apply()
+        _savedKeys.update { it - stale.map { k -> k.removePrefix("saved:") }.toSet() }
+        Diag.log("download", "${stale.size} download(s) do histórico não existem mais em Downloads: esquecidos")
+    }
+
     /** Apaga de Downloads os vídeos salvos, só quando o usuário pede (confirmado na tela). O vídeo continua no Telegram. */
     fun deleteDownloads(videos: List<TgVideo>) = viewModelScope.launch {
         var ok = 0
@@ -236,6 +251,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     init {
+        refreshSaved()
         viewModelScope.launch {
             _played.drop(1).collect { accountPrefs.edit().putStringSet("queuePlayed", it).apply() }
         }
