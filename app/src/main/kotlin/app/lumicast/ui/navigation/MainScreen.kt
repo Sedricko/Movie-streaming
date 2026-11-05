@@ -33,6 +33,7 @@ import app.lumicast.ui.components.TransferBar
 import app.lumicast.ui.components.PreviewPlayer
 import app.lumicast.ui.components.SettingsSheet
 import app.lumicast.ui.components.AccountsSheet
+import app.lumicast.ui.components.MonitorSheet
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.lumicast.ui.screens.LibraryScreen
@@ -96,6 +97,8 @@ fun MainScreen(vm: MainViewModel) {
     val conversion by vm.conversion.collectAsStateWithLifecycle()
     var showSettings by remember { mutableStateOf(false) }
     var showAccounts by remember { mutableStateOf(false) }
+    var showMonitor by remember { mutableStateOf(false) }
+    if (showMonitor) MonitorSheet(onShare = vm::shareDiagnostics, onDismiss = { showMonitor = false })
     val accounts by vm.accounts.collectAsStateWithLifecycle()
     if (showAccounts) {
         AccountsSheet(accounts, vm.currentAccountId, onSwitch = vm::switchAccount, onAdd = vm::addAccount, onDismiss = { showAccounts = false })
@@ -162,7 +165,7 @@ fun MainScreen(vm: MainViewModel) {
                     tv = selectedTv,
                     onPickTv = vm::selectTv,
                     onRescan = vm::rescan,
-                    onShareDiagnostics = vm::shareDiagnostics,
+                    onShareDiagnostics = { showMonitor = true },
                     onOpenSettings = { showSettings = true },
                     onOpenAccounts = { showAccounts = true },
                     pinned = pinned,

@@ -168,7 +168,7 @@ fun LibraryScreen(
                     OverflowMenu(menuOpen, { menuOpen = it }, "Mais opções") {
                         DropdownMenuItem(text = { Text("Configurações") }, onClick = { menuOpen = false; onOpenSettings() })
                         DropdownMenuItem(text = { Text("Contas") }, onClick = { menuOpen = false; onOpenAccounts() })
-                        DropdownMenuItem(text = { Text("Enviar diagnóstico") }, onClick = { menuOpen = false; onShareDiagnostics() })
+                        DropdownMenuItem(text = { Text("Monitoramento") }, onClick = { menuOpen = false; onShareDiagnostics() })
                         DropdownMenuItem(text = { Text("Sair da conta") }, onClick = { menuOpen = false; onLogout() })
                     }
                 }
