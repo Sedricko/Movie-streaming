@@ -27,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import app.lumicast.ui.theme.LumiShapes
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.lumicast.domain.TgVideo
@@ -57,6 +58,22 @@ fun FolderRow(folder: VideoFolder, onClick: () -> Unit, modifier: Modifier = Mod
         ) { Icon(Icons.Rounded.Folder, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer) }
         Column(Modifier.weight(1f)) {
             Text(folder.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("${folder.videos.size} vídeos", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/** Pasta como cartão na faixa horizontal da Biblioteca. */
+@Composable
+fun FolderCard(folder: VideoFolder, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Column(
+        modifier.size(width = 120.dp, height = 88.dp).clip(LumiShapes.Card).background(MaterialTheme.colorScheme.surfaceVariant)
+            .clickable(onClick = onClick).padding(12.dp),
+        verticalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Icon(Icons.Rounded.Folder, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        Column {
+            Text(folder.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text("${folder.videos.size} vídeos", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }

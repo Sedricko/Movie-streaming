@@ -62,7 +62,7 @@ fun ChatRow(chat: TgChat, pinned: Boolean, onClick: () -> Unit, onTogglePin: () 
         Box(
             modifier = Modifier
                 .size(44.dp)
-                .clip(CircleShape)
+                .clip(LumiShapes.Thumb)
                 .background(MaterialTheme.colorScheme.surfaceVariant),
             contentAlignment = Alignment.Center,
         ) {

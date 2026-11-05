@@ -6,7 +6,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -31,7 +33,7 @@ import app.lumicast.domain.Transfer
 import app.lumicast.domain.VideoFolder
 import app.lumicast.ui.components.FolderActions
 import app.lumicast.ui.components.FolderPickerDialog
-import app.lumicast.ui.components.FolderRow
+import app.lumicast.ui.components.FolderCard
 import app.lumicast.ui.components.NameDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -218,7 +220,11 @@ fun LibraryScreen(
                         TextButton(onClick = { newFolderFor = emptyList(); askNewFolder = true }) { Text("Nova pasta") }
                     }
                 }
-                items(shownFolders, key = { "f" + it.id }) { FolderRow(it, onClick = { folderActions.open(it) }) }
+                if (shownFolders.isNotEmpty()) item {
+                    LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        items(shownFolders, key = { "f" + it.id }) { FolderCard(it, onClick = { folderActions.open(it) }) }
+                    }
+                }
                 item { Text("Chats", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 20.dp, top = 12.dp)) }
                 if (shown.isEmpty()) item {
                     Text(
