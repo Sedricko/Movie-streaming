@@ -29,6 +29,8 @@ import app.lumicast.ui.components.TvPicker
 import androidx.compose.material.icons.rounded.RemoveCircleOutline
 import androidx.compose.material.icons.rounded.SelectAll
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.AlertDialog
@@ -83,6 +85,8 @@ fun LibraryScreen(
     onPickTv: (CastDevice) -> Unit,
     onRescan: () -> Unit,
     savedKeys: Set<String>,
+    watchedKeys: Set<String>,
+    onSetWatched: (List<TgVideo>, Boolean) -> Unit,
     onDeleteDownloads: (List<TgVideo>) -> Unit,
     onShareDiagnostics: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -202,6 +206,10 @@ fun LibraryScreen(
                 IconButton(onClick = { onDownloadVideos(selectedVideos); selected = emptySet() }, enabled = downloadStatus == null) {
                     Icon(Icons.Rounded.Download, "Baixar selecionados, um por vez")
                 }
+                val allWatched = selectedVideos.isNotEmpty() && selectedVideos.all { keyOf(it) in watchedKeys }
+                IconButton(onClick = { onSetWatched(selectedVideos, !allWatched); selected = emptySet() }) {
+                    Icon(if (allWatched) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility, if (allWatched) "Tirar a marca de visto dos selecionados" else "Marcar selecionados como vistos")
+                }
                 if (selectedVideos.any { keyOf(it) in savedKeys }) {
                     IconButton(onClick = { deleting = selectedVideos; selected = emptySet() }) {
                         Icon(Icons.Rounded.Delete, "Apagar os downloads dos selecionados")
@@ -283,6 +291,7 @@ fun LibraryScreen(
                             onClick = { if (selected.isNotEmpty()) toggle(it) else pending = it },
                             selected = keyOf(it) in selected,
                             saved = keyOf(it) in savedKeys,
+                            watched = keyOf(it) in watchedKeys,
                             onLongClick = { toggle(it) },
                         ) } }
             }
@@ -318,6 +327,9 @@ fun LibraryScreen(
                     if (openFolder == null) {
                         OutlinedButton(onClick = { addingToFolder = listOf(video); pending = null }, shape = CircleShape, modifier = Modifier.weight(1f)) { Text("Pasta") }
                     }
+                }
+                TextButton(onClick = { onSetWatched(listOf(video), keyOf(video) !in watchedKeys); pending = null }) {
+                    Text(if (keyOf(video) in watchedKeys) "Tirar a marca de visto" else "Marcar como visto")
                 }
                 if (keyOf(video) in savedKeys) {
                     TextButton(onClick = { deleting = listOf(video); pending = null }) {

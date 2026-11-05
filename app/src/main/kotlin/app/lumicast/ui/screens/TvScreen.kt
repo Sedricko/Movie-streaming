@@ -66,6 +66,7 @@ fun TvScreen(
     onCancelSchedule: () -> Unit,
     onDownloadQueue: () -> Unit,
     onClearQueue: () -> Unit,
+    onClearPlayed: () -> Unit,
     onSortQueue: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -120,6 +121,7 @@ fun TvScreen(
             onCancelSchedule = onCancelSchedule,
             onDownloadQueue = onDownloadQueue,
             onClearQueue = onClearQueue,
+            onClearPlayed = onClearPlayed,
             onSort = onSortQueue,
         )
     }

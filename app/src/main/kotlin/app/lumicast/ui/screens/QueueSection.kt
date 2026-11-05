@@ -1,6 +1,9 @@
 package app.lumicast.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -84,6 +87,7 @@ fun QueueSection(
     onCancelSchedule: () -> Unit,
     onDownloadQueue: () -> Unit,
     onClearQueue: () -> Unit,
+    onClearPlayed: () -> Unit,
     onSort: (descending: Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -103,7 +107,14 @@ fun QueueSection(
             if (queue.isNotEmpty()) {
                 if (queue.size > 1) TextButton(onClick = { onSort(ascending) }) { Text(if (ascending) "Ordenar 9→1" else "Ordenar 1→9") }
                 TextButton(onClick = onDownloadQueue) { Text("Baixar") }
-                TextButton(onClick = onClearQueue) { Text("Limpar") }
+                Box {
+                    var clearMenu by remember { mutableStateOf(false) }
+                    TextButton(onClick = { clearMenu = true }) { Text("Limpar") }
+                    DropdownMenu(expanded = clearMenu, onDismissRequest = { clearMenu = false }) {
+                        DropdownMenuItem(text = { Text("Tirar os já tocados") }, onClick = { clearMenu = false; onClearPlayed() })
+                        DropdownMenuItem(text = { Text("Limpar a fila toda") }, onClick = { clearMenu = false; onClearQueue() })
+                    }
+                }
             }
         }
         if (queue.isEmpty()) {

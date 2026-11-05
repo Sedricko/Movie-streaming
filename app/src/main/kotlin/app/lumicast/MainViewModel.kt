@@ -196,21 +196,26 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private fun rememberSaved(video: TgVideo, uri: String) {
         accountPrefs.edit().putString(savedKey(video), uri).apply()
         _savedKeys.update { it + keyOf(video) }
-        dropIfPlayedAndSaved(video)
     }
 
-    /**
-     * Vídeos da fila que já tocaram mas ainda não têm o download confirmado em Downloads: continuam na fila até baixar.
-     * Só então saem (ver [playNext] e [rememberSaved]).
-     */
+    /** Vídeos da fila que já tocaram (a fila não os tira sozinha). O próximo a tocar é o primeiro que não está aqui. */
     private val _played = MutableStateFlow(accountPrefs.getStringSet("queuePlayed", emptySet())!!.toSet())
     val queuePlayed: StateFlow<Set<String>> = _played.asStateFlow()
 
-    private fun dropIfPlayedAndSaved(video: TgVideo) {
-        val k = keyOf(video)
-        if (k !in _played.value) return
-        _queue.update { q -> q.filterNot { keyOf(it) == k } }
-        _played.update { it - k }
+    /** Marca "visto", em qualquer lista. O app marca ao passar de 90% do vídeo; o usuário põe e tira à mão. */
+    private val _watched = MutableStateFlow(accountPrefs.getStringSet("watched", emptySet())!!.toSet())
+    val watchedKeys: StateFlow<Set<String>> = _watched.asStateFlow()
+
+    fun setWatched(videos: List<TgVideo>, watched: Boolean) {
+        val keys = videos.map { keyOf(it) }.toSet()
+        _watched.update { if (watched) it + keys else it - keys }
+        accountPrefs.edit().putStringSet("watched", _watched.value).apply()
+    }
+
+    /** Tira da fila só os que já tocaram. */
+    fun clearPlayed() {
+        _queue.update { q -> q.filter { keyOf(it) !in _played.value } }
+        _played.value = emptySet()
     }
 
     private fun hasPlayable() = _queue.value.any { keyOf(it) !in _played.value }
@@ -316,6 +321,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 if (old == null || abs(frac - old) >= 0.01f || (frac == 1f && old != 1f)) {
                     _progress.value += key to frac
                     progressPrefs.edit().putFloat(key, frac).apply()
+                    if (frac >= 0.9f && (old ?: 0f) < 0.9f) setWatched(listOf(v), true) // só na passagem dos 90%: não refaz a marca que o usuário tirou
                 }
             }
         }
@@ -577,9 +583,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun playNext(device: CastDevice) {
         val next = _queue.value.firstOrNull { keyOf(it) !in _played.value } ?: return
-        // Só sai da fila com certeza de que está baixado (o arquivo abre); senão toca e fica, marcado como "já tocou".
-        val certain = savedSource(next)?.also { it.close() } != null
-        if (certain) _queue.update { q -> q.filterNot { keyOf(it) == keyOf(next) } } else _played.update { it + keyOf(next) }
+        _played.update { it + keyOf(next) } // fica na fila, marcado como "já tocou"; quem tira é o usuário (Limpar)
         cast.playback.value.video?.let { history.addLast(it) }
         castTo(next, device)
     }

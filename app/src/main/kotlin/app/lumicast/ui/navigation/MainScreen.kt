@@ -80,6 +80,7 @@ fun MainScreen(vm: MainViewModel) {
     val queue by vm.queue.collectAsStateWithLifecycle()
     val played by vm.queuePlayed.collectAsStateWithLifecycle()
     val saved by vm.savedKeys.collectAsStateWithLifecycle()
+    val watched by vm.watchedKeys.collectAsStateWithLifecycle()
     val folders by vm.folders.collectAsStateWithLifecycle()
     val openFolder by vm.openFolder.collectAsStateWithLifecycle()
     val downloadStatus by vm.downloadStatus.collectAsStateWithLifecycle()
@@ -167,7 +168,9 @@ fun MainScreen(vm: MainViewModel) {
                     tv = selectedTv,
                     onPickTv = vm::selectTv,
                     onRescan = vm::rescan,
-                    savedKeys = vm.savedKeys.collectAsStateWithLifecycle().value,
+                    savedKeys = saved,
+                    watchedKeys = watched,
+                    onSetWatched = vm::setWatched,
                     onDeleteDownloads = vm::deleteDownloads,
                     onShareDiagnostics = { showMonitor = true },
                     onOpenSettings = { showSettings = true },
@@ -214,7 +217,11 @@ fun MainScreen(vm: MainViewModel) {
                     canSkipNext = queue.any { "${it.chatId}:${it.messageId}" !in played } || settings.autoNext,
                     queueNote = { v ->
                         val k = "${v.chatId}:${v.messageId}"
-                        when { k in played -> "Já tocou · falta baixar"; k in saved -> "Baixado"; else -> null }
+                        listOfNotNull(
+                            if (k in watched) "Visto" else null,
+                            if (k in played) "Já tocou" else null,
+                            if (k in saved) "Baixado" else null,
+                        ).joinToString(" • ").ifEmpty { null }
                     },
                     onVolume = vm::setVolume,
                     onSpeed = vm::setSpeed,
@@ -231,6 +238,7 @@ fun MainScreen(vm: MainViewModel) {
                     onCancelSchedule = vm::cancelSchedule,
                     onDownloadQueue = vm::downloadQueue,
                     onClearQueue = vm::clearQueue,
+                    onClearPlayed = vm::clearPlayed,
                     onSortQueue = vm::sortQueue,
                 )
             }
