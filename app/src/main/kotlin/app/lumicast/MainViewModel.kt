@@ -264,7 +264,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Roda [block] (um download do Telegram) atualizando a % a cada meio segundo. */
     private suspend fun <T> withDownloadProgress(video: TgVideo, onFraction: (Float) -> Unit, block: suspend () -> T): T = coroutineScope {
-        val poll = launch { while (true) { onFraction(telegram.downloadedFraction(video)); delay(500) } }
+        val poll = launch {
+            var last = -1f
+            var since = System.nanoTime()
+            while (true) {
+                val f = telegram.downloadedFraction(video)
+                if (f != last) { last = f; since = System.nanoTime() }
+                // TDLib espera a rede voltar para sempre: sem este limite a barra congela e nada mais baixa (botão fica desligado)
+                else if (System.nanoTime() - since > STALL_NS) error("Sem progresso há 90 s. Confira a internet e tente de novo.")
+                onFraction(f)
+                delay(500)
+            }
+        }
         try { block() } finally { poll.cancel() }
     }
 
@@ -320,6 +331,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         // shortcut: o download vive no ViewModel; se o Android matar o app no meio, refaça (WorkManager resolveria).
         downloadJob = container.transfers.scope.launch { // sobrevive a fechar a tela
             var done = 0
+            var lastError: String? = null
             var current: TgVideo? = null
             try {
                 videos.forEachIndexed { i, video ->
@@ -340,10 +352,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     }.onFailure {
                         if (it is CancellationException) throw it
                         Diag.log("download", "falhou ${video.fileId}: ${it.message}")
+                        lastError = it.message
                     }
                 }
                 val msg = if (done == videos.size) "Vídeos salvos em Downloads/Lumicast/$name."
-                else "Baixados $done de ${videos.size}. Confira a internet e o espaço livre e tente de novo."
+                else "Baixados $done de ${videos.size}. ${lastError ?: "Confira a internet e o espaço livre e tente de novo."}"
                 Toast.makeText(getApplication(), msg, Toast.LENGTH_LONG).show()
             } catch (e: CancellationException) {
                 current?.let { withContext(NonCancellable) { telegram.closeStream(it) } } // parar o download no TDLib também
@@ -783,6 +796,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private companion object {
+        const val STALL_NS = 90_000_000_000L
         const val MAX_VIDEOS = 5_000 // canais enormes: o suficiente sem travar a lista
     }
 }

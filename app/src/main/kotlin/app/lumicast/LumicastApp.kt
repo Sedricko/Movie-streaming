@@ -13,6 +13,7 @@ import app.lumicast.data.telegram.TdlibTelegramGateway
 import app.lumicast.domain.CastGateway
 import app.lumicast.domain.TelegramGateway
 import app.lumicast.domain.Transfer
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -47,9 +48,17 @@ class AppContainer(context: Context) {
  * a notificação e mantém o Android de pé). A tela só observa.
  */
 class Transfers {
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     val download = MutableStateFlow<Transfer?>(null)
     val conversion = MutableStateFlow<Transfer?>(null)
+
+    // Erro inesperado numa tarefa de fundo: registra e solta o estado, senão a barra fica presa e "Baixar" não volta.
+    val scope = CoroutineScope(
+        SupervisorJob() + Dispatchers.Main.immediate + CoroutineExceptionHandler { _, e ->
+            Diag.log("erro", "transferência: ${e.stackTraceToString().take(600)}")
+            download.value = null
+            conversion.value = null
+        },
+    )
     var downloadJob: Job? = null
     var convertJob: Job? = null
 
