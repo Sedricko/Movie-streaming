@@ -56,6 +56,11 @@ Marque `[x]` ao concluir. Sempre: build verde + testes + atualizar este arquivo.
 - [x] Logo novo + tela "conectado" na TV, tema claro/escuro, downloads em segundo plano com notificação,
       gerenciar espaço (cache/convertidos/limite), várias contas do Telegram.
 
+- [x] Redesign (nov/2026): fontes Figtree/Bricolage embutidas, busca e campos em pílula, miniaturas 16:9 com duração, pastas em cartões,
+      mini player com miniatura, tela de reprodução com capa, entrar com logo e 3 passos, botões em pílula. Monitoramento (menu ⋮):
+      cartões com estado, pistas de causa, vigia de travamento/parada, estado do aparelho, sessão anterior. Baixar a fila adiante (Configurações).
+      **Visual conferido só por CI e capturas do usuário; falta revisar claro/escuro e fontes em telas pequenas.**
+
 ## M6 — Expansão (v2)
 - [ ] Roku (ECP), Fire TV (Fling), LG webOS, Samsung/Tizen. Transcodificação/HLS sob demanda.
 - [ ] App receptor opcional para Android TV (player VLC/Media3 + login por QR) para quem não tem Chromecast.

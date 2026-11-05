@@ -1,5 +1,14 @@
 package app.lumicast.ui.screens
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import app.lumicast.domain.TgVideo
+import app.lumicast.ui.components.rememberThumb
+import app.lumicast.ui.theme.LumiShapes
+import app.lumicast.ui.theme.LumiTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -49,6 +58,7 @@ import app.lumicast.ui.components.formatDuration
 @Composable
 fun NowPlayingSection(
     state: PlaybackState,
+    loadThumbnail: suspend (TgVideo) -> String?,
     onTogglePause: () -> Unit,
     onSeek: (Int) -> Unit,
     onStop: () -> Unit,
@@ -76,6 +86,10 @@ fun NowPlayingSection(
     }
 
     Column(modifier, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        val art = rememberThumb(video, loadThumbnail)
+        Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(LumiShapes.Card).background(MaterialTheme.colorScheme.surfaceVariant)) {
+            art?.let { Image(it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
+        }
         Text(video.title, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
 
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -85,7 +99,15 @@ fun NowPlayingSection(
             }
             Icon(Icons.Rounded.Tv, contentDescription = "TV", tint = MaterialTheme.colorScheme.primary)
         }
-        Text(statusText, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        val live = state.status == PlayStatus.Playing
+        Text(
+            statusText,
+            style = MaterialTheme.typography.labelMedium,
+            color = if (live) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.clip(CircleShape)
+                .background(if (live) LumiTheme.extras.feixeSuave else MaterialTheme.colorScheme.surfaceVariant)
+                .padding(horizontal = 12.dp, vertical = 4.dp),
+        )
 
         Column {
             // M5: trocar por barra própria mostrando o trecho já baixado em tom mais claro.

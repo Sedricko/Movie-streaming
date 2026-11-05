@@ -131,7 +131,7 @@ fun MainScreen(vm: MainViewModel) {
                 downloadStatus?.let { TransferBar(it, onCancel = vm::cancelDownload) }
                 conversion?.let { TransferBar(it, onCancel = vm::cancelConversion) }
                 if (playback.video != null && route != Tab.Tv.route) {
-                    MiniPlayer(playback, onOpen = { go(Tab.Tv) }, onTogglePause = vm::togglePause)
+                    MiniPlayer(playback, loadThumbnail = vm::thumbnail, onOpen = { go(Tab.Tv) }, onTogglePause = vm::togglePause)
                 }
                 NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
                     Tab.entries.forEach { tab ->
@@ -196,6 +196,7 @@ fun MainScreen(vm: MainViewModel) {
             }
             composable(Tab.Tv.route) {
                 TvScreen(
+                    loadThumbnail = vm::thumbnail,
                     playback = playback,
                     tv = selectedTv,
                     devices = devices,

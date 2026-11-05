@@ -1,5 +1,9 @@
 package app.lumicast.ui.components
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.layout.ContentScale
+import app.lumicast.domain.TgVideo
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -7,10 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -29,7 +30,7 @@ import app.lumicast.domain.PlaybackState
 import app.lumicast.ui.theme.LumiShapes
 
 @Composable
-fun MiniPlayer(state: PlaybackState, onOpen: () -> Unit, onTogglePause: () -> Unit, modifier: Modifier = Modifier) {
+fun MiniPlayer(state: PlaybackState, loadThumbnail: suspend (TgVideo) -> String?, onOpen: () -> Unit, onTogglePause: () -> Unit, modifier: Modifier = Modifier) {
     val video = state.video ?: return
     Row(
         modifier = modifier
@@ -38,17 +39,21 @@ fun MiniPlayer(state: PlaybackState, onOpen: () -> Unit, onTogglePause: () -> Un
             .clip(LumiShapes.Card)
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .clickable(onClick = onOpen)
-            .padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+            .padding(start = 8.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        BeamBar()
+        val art = rememberThumb(video, loadThumbnail)
+        Box(Modifier.size(48.dp).clip(LumiShapes.Thumb).background(MaterialTheme.colorScheme.surface)) {
+            art?.let { Image(it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
+        }
         Column(Modifier.weight(1f)) {
             Text(video.title, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            val live = state.status == PlayStatus.Playing
             Text(
-                "Na ${state.device?.name}",
+                if (live) "Transmitindo na ${state.device?.name}" else "Na ${state.device?.name}",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = if (live) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         IconButton(onClick = onTogglePause) {
@@ -59,15 +64,4 @@ fun MiniPlayer(state: PlaybackState, onOpen: () -> Unit, onTogglePause: () -> Un
             )
         }
     }
-}
-
-@Composable
-private fun BeamBar() {
-    Box(
-        Modifier
-            .width(3.dp)
-            .height(32.dp)
-            .clip(RoundedCornerShape(2.dp))
-            .background(MaterialTheme.colorScheme.primary),
-    )
 }

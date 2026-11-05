@@ -38,6 +38,8 @@ import app.lumicast.domain.Transfer
 import app.lumicast.domain.VideoFolder
 import app.lumicast.ui.components.FolderActions
 import app.lumicast.ui.components.FolderPickerDialog
+import app.lumicast.ui.components.formatDuration
+import app.lumicast.ui.components.formatSize
 import app.lumicast.ui.components.FolderCard
 import app.lumicast.ui.components.NameDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -281,6 +283,11 @@ fun LibraryScreen(
         ModalBottomSheet(onDismissRequest = { pending = null; choosingTvFor = false }) {
             Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(video.title, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(
+                    "${formatDuration(video.durationSec)} • ${formatSize(video.sizeBytes)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 fun cast(device: CastDevice) {
                     onPickTv(device)
                     onCast(video, device)
@@ -296,17 +303,17 @@ fun LibraryScreen(
                     TvPicker(devices, tv?.id, onPick = ::cast, onRescan = onRescan)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { onPreview(video); pending = null }, modifier = Modifier.weight(1f)) { Text("No celular") }
-                    OutlinedButton(onClick = { onEnqueue(video); pending = null }, modifier = Modifier.weight(1f)) { Text("Fila") }
+                    OutlinedButton(onClick = { onPreview(video); pending = null }, shape = CircleShape, modifier = Modifier.weight(1f)) { Text("No celular") }
+                    OutlinedButton(onClick = { onEnqueue(video); pending = null }, shape = CircleShape, modifier = Modifier.weight(1f)) { Text("Fila") }
                     if (openFolder == null) {
-                        OutlinedButton(onClick = { addingToFolder = listOf(video); pending = null }, modifier = Modifier.weight(1f)) { Text("Pasta") }
+                        OutlinedButton(onClick = { addingToFolder = listOf(video); pending = null }, shape = CircleShape, modifier = Modifier.weight(1f)) { Text("Pasta") }
                     }
                 }
                 if (openFolder != null) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { renamingVideo = video; pending = null }, modifier = Modifier.weight(1f)) { Text("Renomear") }
-                        OutlinedButton(onClick = { moving = video; pending = null }, modifier = Modifier.weight(1f)) { Text("Mover") }
-                        OutlinedButton(onClick = { folderActions.removeVideo(openFolder.id, video); pending = null }, modifier = Modifier.weight(1f)) {
+                        OutlinedButton(onClick = { renamingVideo = video; pending = null }, shape = CircleShape, modifier = Modifier.weight(1f)) { Text("Renomear") }
+                        OutlinedButton(onClick = { moving = video; pending = null }, shape = CircleShape, modifier = Modifier.weight(1f)) { Text("Mover") }
+                        OutlinedButton(onClick = { folderActions.removeVideo(openFolder.id, video); pending = null }, shape = CircleShape, modifier = Modifier.weight(1f)) {
                             Text("Tirar")
                         }
                     }

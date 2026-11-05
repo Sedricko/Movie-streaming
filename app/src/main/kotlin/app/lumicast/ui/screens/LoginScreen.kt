@@ -9,6 +9,16 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Cast
+import androidx.compose.material3.Icon
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import app.lumicast.ui.components.lumiFieldColors
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -60,6 +70,10 @@ fun LoginScreen(
         modifier = Modifier.fillMaxSize().safeDrawingPadding().padding(horizontal = 24.dp, vertical = 32.dp),
         verticalArrangement = Arrangement.Center,
     ) {
+        Box(Modifier.size(56.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary), contentAlignment = Alignment.Center) {
+            Icon(Icons.Rounded.Cast, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary)
+        }
+        Spacer(Modifier.height(16.dp))
         Text("Lumicast", style = MaterialTheme.typography.displayMedium)
         Spacer(Modifier.height(8.dp))
         Text(
@@ -67,7 +81,17 @@ fun LoginScreen(
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Spacer(Modifier.height(40.dp))
+        Spacer(Modifier.height(24.dp))
+        val step = when { editingPhone -> 1; state is AuthState.WaitCode -> 2; state == AuthState.WaitPassword -> 3; else -> 1 }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            repeat(3) { i ->
+                Box(
+                    Modifier.weight(1f).height(3.dp).clip(CircleShape)
+                        .background(if (i < step) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant),
+                )
+            }
+        }
+        Spacer(Modifier.height(24.dp))
 
         when (val shown = if (editingPhone && state is AuthState.WaitCode) AuthState.WaitPhone else state) {
             AuthState.Loading -> CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
@@ -85,10 +109,12 @@ fun LoginScreen(
                     placeholder = { Text("+55 11 91234-5678") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                    shape = CircleShape,
+                    colors = lumiFieldColors(),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(16.dp))
-                Button(onClick = { editingPhone = false; onPhone(phone) }, enabled = phone.length >= 8, modifier = Modifier.fillMaxWidth()) {
+                Button(onClick = { editingPhone = false; onPhone(phone) }, enabled = phone.length >= 8, shape = CircleShape, modifier = Modifier.fillMaxWidth().height(52.dp)) {
                     Text("Entrar com o Telegram")
                 }
             }
@@ -106,10 +132,12 @@ fun LoginScreen(
                     label = { Text("Código") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    shape = CircleShape,
+                    colors = lumiFieldColors(),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(16.dp))
-                Button(onClick = { onCode(code) }, enabled = code.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
+                Button(onClick = { onCode(code) }, enabled = code.isNotBlank(), shape = CircleShape, modifier = Modifier.fillMaxWidth().height(52.dp)) {
                     Text("Confirmar código")
                 }
                 Spacer(Modifier.height(8.dp))
@@ -134,10 +162,12 @@ fun LoginScreen(
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    shape = CircleShape,
+                    colors = lumiFieldColors(),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(16.dp))
-                Button(onClick = { onPassword(password) }, enabled = password.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
+                Button(onClick = { onPassword(password) }, enabled = password.isNotBlank(), shape = CircleShape, modifier = Modifier.fillMaxWidth().height(52.dp)) {
                     Text("Entrar")
                 }
             }

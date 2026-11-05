@@ -55,7 +55,7 @@ fun ChatRow(chat: TgChat, pinned: Boolean, onClick: () -> Unit, onTogglePin: () 
         modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 12.dp),
+            .padding(horizontal = 20.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
@@ -198,4 +198,13 @@ fun EmptyState(title: String, message: String, modifier: Modifier = Modifier, ac
             }
         }
     }
+}
+
+/** Miniatura do vídeo (null enquanto carrega ou se não houver). Usada no mini player e na tela de reprodução. */
+@Composable
+fun rememberThumb(video: TgVideo, load: suspend (TgVideo) -> String?): ImageBitmap? {
+    val thumb by produceState<ImageBitmap?>(null, video.fileId) {
+        value = load(video)?.let { path -> withContext(Dispatchers.IO) { BitmapFactory.decodeFile(path)?.asImageBitmap() } }
+    }
+    return thumb
 }

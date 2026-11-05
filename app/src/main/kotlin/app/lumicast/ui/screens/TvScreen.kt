@@ -37,6 +37,7 @@ import app.lumicast.ui.components.TvPicker
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TvScreen(
+    loadThumbnail: suspend (TgVideo) -> String?,
     playback: PlaybackState,
     tv: CastDevice?,
     devices: List<CastDevice>,
@@ -88,6 +89,7 @@ fun TvScreen(
 
         NowPlayingSection(
             state = playback,
+            loadThumbnail = loadThumbnail,
             onTogglePause = onTogglePause,
             onSeek = onSeek,
             onStop = onStop,
