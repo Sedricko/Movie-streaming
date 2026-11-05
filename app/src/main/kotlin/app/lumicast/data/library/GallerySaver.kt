@@ -53,7 +53,8 @@ fun findInDownloads(context: Context, folder: String, title: String, mimeType: S
 fun savedExists(context: Context, uri: String): Boolean = runCatching {
     val u = Uri.parse(uri)
     if (u.scheme == "file") File(u.path.orEmpty()).let { it.isFile && it.length() > 0 }
-    else context.contentResolver.query(u, arrayOf(MediaStore.MediaColumns.SIZE), null, null, null)?.use { it.moveToFirst() && it.getLong(0) > 0 } ?: false
+    // Abre de verdade: o registro na mídia do Android pode continuar depois de o gerenciador de arquivos apagar o arquivo.
+    else context.contentResolver.openFileDescriptor(u, "r")?.use { it.statSize > 0 } ?: false
 }.getOrDefault(false)
 
 /** Apaga o arquivo salvo em Downloads (Uri de MediaStore ou arquivo). Sem erro = apagou ou já não existia; o Android pode recusar (SecurityException). */
