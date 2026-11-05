@@ -166,6 +166,7 @@ fun MainScreen(vm: MainViewModel) {
                     onPickTv = vm::selectTv,
                     onRescan = vm::rescan,
                     savedKeys = vm.savedKeys.collectAsStateWithLifecycle().value,
+                    onDeleteDownloads = vm::deleteDownloads,
                     onShareDiagnostics = { showMonitor = true },
                     onOpenSettings = { showSettings = true },
                     onOpenAccounts = { showAccounts = true },

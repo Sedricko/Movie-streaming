@@ -9,6 +9,7 @@ import app.lumicast.data.library.SavedVideoSource
 import app.lumicast.data.library.VideoConverter
 import android.net.Uri
 import app.lumicast.data.library.decodeFolders
+import app.lumicast.data.library.deleteSaved
 import app.lumicast.data.library.encodeFolders
 import app.lumicast.data.library.findInDownloads
 import app.lumicast.data.library.saveToDownloads
@@ -192,6 +193,27 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private fun rememberSaved(video: TgVideo, uri: String) {
         rememberSaved(video, uri)
         _savedKeys.update { it + keyOf(video) }
+    }
+
+    /** Apaga de Downloads os vídeos salvos, só quando o usuário pede (confirmado na tela). O vídeo continua no Telegram. */
+    fun deleteDownloads(videos: List<TgVideo>) = viewModelScope.launch {
+        var ok = 0
+        var failed = 0
+        for (v in videos) {
+            val uri = accountPrefs.getString(savedKey(v), null) ?: continue
+            if (streaming?.first?.fileId == v.fileId) { failed++; continue } // está tocando agora: apagar derrubaria a transmissão
+            val done = withContext(Dispatchers.IO) { runCatching { deleteSaved(getApplication(), uri) }.onFailure { Diag.log("download", "apagar falhou: ${it.message}") }.isSuccess }
+            if (done) {
+                accountPrefs.edit().remove(savedKey(v)).apply()
+                _savedKeys.update { it - keyOf(v) }
+                ok++
+            } else failed++
+        }
+        val msg = buildString {
+            if (ok > 0) append(if (ok == 1) "Download apagado." else "$ok downloads apagados.")
+            if (failed > 0) append(" Não deu para apagar $failed (está tocando ou o Android não deixou).")
+        }.trim()
+        if (msg.isNotEmpty()) Toast.makeText(getApplication(), msg, Toast.LENGTH_LONG).show()
     }
 
     init {

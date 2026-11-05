@@ -28,6 +28,7 @@ import androidx.compose.material3.DropdownMenuItem
 import app.lumicast.ui.components.TvPicker
 import androidx.compose.material.icons.rounded.RemoveCircleOutline
 import androidx.compose.material.icons.rounded.SelectAll
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.AlertDialog
@@ -82,6 +83,7 @@ fun LibraryScreen(
     onPickTv: (CastDevice) -> Unit,
     onRescan: () -> Unit,
     savedKeys: Set<String>,
+    onDeleteDownloads: (List<TgVideo>) -> Unit,
     onShareDiagnostics: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenAccounts: () -> Unit,
@@ -128,6 +130,7 @@ fun LibraryScreen(
     var renamingVideo by remember { mutableStateOf<TgVideo?>(null) }
     var renamingFolder by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf<List<TgVideo>?>(null) } // confirmação de "Apagar download"
     var menuOpen by remember { mutableStateOf(false) }
     var choosingTvFor by remember { mutableStateOf(false) } // "Outra TV" na folha do vídeo
 
@@ -198,6 +201,11 @@ fun LibraryScreen(
                 }
                 IconButton(onClick = { onDownloadVideos(selectedVideos); selected = emptySet() }, enabled = downloadStatus == null) {
                     Icon(Icons.Rounded.Download, "Baixar selecionados, um por vez")
+                }
+                if (selectedVideos.any { keyOf(it) in savedKeys }) {
+                    IconButton(onClick = { deleting = selectedVideos; selected = emptySet() }) {
+                        Icon(Icons.Rounded.Delete, "Apagar os downloads dos selecionados")
+                    }
                 }
                 if (openFolder != null) {
                     IconButton(onClick = { selectedVideos.forEach { folderActions.removeVideo(openFolder.id, it) }; selected = emptySet() }) {
@@ -311,6 +319,11 @@ fun LibraryScreen(
                         OutlinedButton(onClick = { addingToFolder = listOf(video); pending = null }, shape = CircleShape, modifier = Modifier.weight(1f)) { Text("Pasta") }
                     }
                 }
+                if (keyOf(video) in savedKeys) {
+                    TextButton(onClick = { deleting = listOf(video); pending = null }) {
+                        Text("Apagar download", color = MaterialTheme.colorScheme.error)
+                    }
+                }
                 if (openFolder != null) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = { renamingVideo = video; pending = null }, shape = CircleShape, modifier = Modifier.weight(1f)) { Text("Renomear") }
@@ -322,6 +335,17 @@ fun LibraryScreen(
                 }
             }
         }
+    }
+
+    deleting?.let { list ->
+        val saved = list.filter { keyOf(it) in savedKeys }
+        AlertDialog(
+            onDismissRequest = { deleting = null },
+            title = { Text(if (saved.size == 1) "Apagar este download?" else "Apagar ${saved.size} downloads?") },
+            text = { Text("O arquivo sai de Downloads/Lumicast no celular. O vídeo continua no Telegram e você pode baixar de novo.") },
+            confirmButton = { TextButton(onClick = { onDeleteDownloads(saved); deleting = null }) { Text("Apagar") } },
+            dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancelar") } },
+        )
     }
 
     addingToFolder?.let { list ->

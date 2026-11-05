@@ -49,6 +49,12 @@ fun findInDownloads(context: Context, folder: String, title: String, mimeType: S
     return null
 }
 
+/** Apaga o arquivo salvo em Downloads (Uri de MediaStore ou arquivo). Sem erro = apagou ou já não existia; o Android pode recusar (SecurityException). */
+fun deleteSaved(context: Context, uri: String) {
+    val u = Uri.parse(uri)
+    if (u.scheme == "file") u.path?.let { File(it).delete() } else context.contentResolver.delete(u, null, null)
+}
+
 /** Copia o vídeo baixado para Downloads/Lumicast/<pasta> (aparece na galeria). Devolve a Uri do arquivo salvo. */
 fun saveToDownloads(context: Context, src: File, folder: String, title: String, mimeType: String): String {
     val name = safeFileName(title, mimeType)
