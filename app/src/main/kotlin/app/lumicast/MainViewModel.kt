@@ -193,9 +193,26 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val savedKeys: StateFlow<Set<String>> = _savedKeys.asStateFlow()
 
     private fun rememberSaved(video: TgVideo, uri: String) {
-        rememberSaved(video, uri)
+        accountPrefs.edit().putString(savedKey(video), uri).apply()
         _savedKeys.update { it + keyOf(video) }
+        dropIfPlayedAndSaved(video)
     }
+
+    /**
+     * Vídeos da fila que já tocaram mas ainda não têm o download confirmado em Downloads: continuam na fila até baixar.
+     * Só então saem (ver [playNext] e [rememberSaved]).
+     */
+    private val _played = MutableStateFlow(accountPrefs.getStringSet("queuePlayed", emptySet())!!.toSet())
+    val queuePlayed: StateFlow<Set<String>> = _played.asStateFlow()
+
+    private fun dropIfPlayedAndSaved(video: TgVideo) {
+        val k = keyOf(video)
+        if (k !in _played.value) return
+        _queue.update { q -> q.filterNot { keyOf(it) == k } }
+        _played.update { it - k }
+    }
+
+    private fun hasPlayable() = _queue.value.any { keyOf(it) !in _played.value }
 
     /** Apaga de Downloads os vídeos salvos, só quando o usuário pede (confirmado na tela). O vídeo continua no Telegram. */
     fun deleteDownloads(videos: List<TgVideo>) = viewModelScope.launch {
