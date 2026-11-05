@@ -290,6 +290,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Vídeos já tocados, para o botão "Anterior". */
     private val history = ArrayDeque<TgVideo>()
 
+    /** Guarda o vídeo para o "Anterior". Limite de 100 e sem repetir em sequência (toques rápidos): a lista crescia sem fim. */
+    private fun pushHistory(video: TgVideo?) {
+        if (video == null || history.lastOrNull()?.let { keyOf(it) == keyOf(video) } == true) return
+        history.addLast(video)
+        if (history.size > 100) history.removeFirst()
+    }
+
     private var queueDevice: CastDevice? = null
     private var scheduleJob: Job? = null
     private var switchJob: Job? = null
@@ -482,10 +489,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun enqueue(video: TgVideo) = enqueueAll(listOf(video))
 
     fun enqueueAll(videos: List<TgVideo>) {
-        _queue.value += videos
+        // Mesmo vídeo duas vezes confundia o "já tocou" (a marca é por vídeo): só entra o que ainda não está na fila.
+        val fresh = videos.filter { v -> _queue.value.none { keyOf(it) == keyOf(v) } }
+        if (fresh.isEmpty()) {
+            Toast.makeText(getApplication(), "Já está na fila.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        _queue.value += fresh
         startPrefetch() // fila nova com algo tocando: o laço pega os acrescentados
-        val what = if (videos.size == 1) "Adicionado" else "${videos.size} vídeos adicionados"
-        Toast.makeText(getApplication(), "$what à fila (${_queue.value.size} no total).", Toast.LENGTH_SHORT).show()
+        val what = if (fresh.size == 1) "Adicionado" else "${fresh.size} vídeos adicionados"
+        val skipped = if (fresh.size < videos.size) " ${videos.size - fresh.size} já estavam." else ""
+        Toast.makeText(getApplication(), "$what à fila (${_queue.value.size} no total).$skipped", Toast.LENGTH_SHORT).show()
     }
 
     /** Põe a fila em sequência pelo nome (vídeo 1, 2, 3…); [descending] inverte. */
@@ -547,7 +561,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val video = q.getOrNull(index) ?: return
         val device = queueDevice ?: cast.playback.value.device ?: selectedTv.value ?: return
         _played.value = q.take(index + 1).map { keyOf(it) }.toSet()
-        cast.playback.value.video?.let { history.addLast(it) }
+        pushHistory(cast.playback.value.video)
         castTo(video, device)
     }
 
@@ -557,6 +571,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Começa a fila na [device] agora ou no horário [atMillis]. */
     fun startQueue(device: CastDevice, atMillis: Long?) {
+        if (_queue.value.isEmpty()) {
+            Toast.makeText(getApplication(), "A fila está vazia. Na Biblioteca, toque num vídeo e escolha “Fila”.", Toast.LENGTH_LONG).show()
+            return
+        }
         scheduleJob?.cancel()
         _scheduledAt.value = atMillis
         // shortcut: o agendamento vive enquanto o app estiver aberto; usar AlarmManager se precisar sobreviver a fechar o app.
@@ -579,7 +597,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val next = if (_settings.value.autoNext) nextEpisode() else null
         when {
             next != null -> {
-                cast.playback.value.video?.let { history.addLast(it) }
+                pushHistory(cast.playback.value.video)
                 castTo(next, device)
             }
             _settings.value.showSplash -> showSplash(device) // acabou tudo: a TV volta a mostrar "conectado"
@@ -601,7 +619,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private fun playNext(device: CastDevice) {
         val next = _queue.value.firstOrNull { keyOf(it) !in _played.value } ?: return
         _played.update { it + keyOf(next) } // fica na fila, marcado como "já tocou"; quem tira é o usuário (Limpar)
-        cast.playback.value.video?.let { history.addLast(it) }
+        pushHistory(cast.playback.value.video)
         castTo(next, device)
     }
 

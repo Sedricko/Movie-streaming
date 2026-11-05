@@ -31,7 +31,15 @@ class TransferService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_CANCEL) transfers.cancelAll()
         val type = if (Build.VERSION.SDK_INT >= 29) ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC else 0
-        ServiceCompat.startForeground(this, NOTIFICATION_ID, notification(null), type)
+        // O Android 12+ recusa iniciar em primeiro plano com o app em segundo plano (ForegroundServiceStartNotAllowedException):
+        // sem este try, a recusa derrubava o app. Falhou: o download segue sem notificação e o serviço se encerra.
+        val started = runCatching { ServiceCompat.startForeground(this, NOTIFICATION_ID, notification(null), type) }
+            .onFailure { Diag.log("transfer", "serviço em primeiro plano recusado: ${it.message}") }
+            .isSuccess
+        if (!started) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
         if (watch == null) {
             watch = scope.launch {
                 combine(transfers.download, transfers.conversion) { d, c -> c ?: d }.collect { t ->
