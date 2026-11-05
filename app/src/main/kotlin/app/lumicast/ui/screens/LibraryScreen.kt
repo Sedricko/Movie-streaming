@@ -81,6 +81,7 @@ fun LibraryScreen(
     tv: CastDevice?,
     onPickTv: (CastDevice) -> Unit,
     onRescan: () -> Unit,
+    savedKeys: Set<String>,
     onShareDiagnostics: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenAccounts: () -> Unit,
@@ -273,6 +274,7 @@ fun LibraryScreen(
                             loadThumbnail,
                             onClick = { if (selected.isNotEmpty()) toggle(it) else pending = it },
                             selected = keyOf(it) in selected,
+                            saved = keyOf(it) in savedKeys,
                             onLongClick = { toggle(it) },
                         ) } }
             }

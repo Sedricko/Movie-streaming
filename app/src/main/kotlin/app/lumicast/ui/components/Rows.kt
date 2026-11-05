@@ -99,6 +99,7 @@ fun VideoRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     selected: Boolean = false,
+    saved: Boolean = false,
     onLongClick: (() -> Unit)? = null,
 ) {
     val thumb by produceState<ImageBitmap?>(null, video.fileId) {
@@ -146,9 +147,9 @@ fun VideoRow(
         Column(Modifier.weight(1f)) {
             Text(video.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(
-                formatSize(video.sizeBytes),
+                if (saved) "Baixado • ${formatSize(video.sizeBytes)}" else formatSize(video.sizeBytes),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = if (saved) LumiTheme.extras.ok else MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }

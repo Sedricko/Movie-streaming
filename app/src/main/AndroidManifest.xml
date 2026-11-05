@@ -18,7 +18,9 @@
          O Telegram (TDLib) usa a própria criptografia e não é afetado. -->
     <application
         android:name=".LumicastApp"
-        android:allowBackup="false"
+        android:allowBackup="true"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:usesCleartextTraffic="true"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"

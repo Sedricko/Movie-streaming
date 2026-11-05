@@ -185,6 +185,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _queue = MutableStateFlow(decodeFolders(accountPrefs.getString("queue", null)).firstOrNull()?.videos ?: emptyList())
     val queue: StateFlow<List<TgVideo>> = _queue.asStateFlow()
 
+    /** Vídeos que este app já salvou em Downloads (a lista mostra "Baixado"). Vem das preferências, então sobrevive a fechar o app. */
+    private val _savedKeys = MutableStateFlow(accountPrefs.all.keys.filter { it.startsWith("saved:") }.map { it.removePrefix("saved:") }.toSet())
+    val savedKeys: StateFlow<Set<String>> = _savedKeys.asStateFlow()
+
+    private fun rememberSaved(video: TgVideo, uri: String) {
+        rememberSaved(video, uri)
+        _savedKeys.update { it + keyOf(video) }
+    }
+
     init {
         viewModelScope.launch {
             _queue.drop(1).collect { accountPrefs.edit().putString("queue", encodeFolders(listOf(VideoFolder("queue", "queue", it)))).apply() }
@@ -359,7 +368,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     // O app pode ter esquecido que salvou (reinstalou, limpou dados): confere o arquivo em Downloads antes de baixar.
                     val existing = withContext(Dispatchers.IO) { runCatching { findInDownloads(getApplication(), name, video.title, video.mimeType, video.sizeBytes) }.getOrNull() }
                     if (existing != null) {
-                        accountPrefs.edit().putString(savedKey(video), existing).apply()
+                        rememberSaved(video, existing)
                         Diag.log("download", "file=${video.fileId} já existe em Downloads/Lumicast/$name: não baixou de novo")
                         done++
                         return@forEachIndexed
@@ -578,7 +587,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         convertedSource(video)?.let { return it }
         val uri = accountPrefs.getString(savedKey(video), null) ?: return null
         val source = SavedVideoSource.open(getApplication(), uri, video.mimeType)
-        if (source == null) accountPrefs.edit().remove(savedKey(video)).apply() // apagaram da galeria: volta a usar o Telegram
+        if (source == null) { accountPrefs.edit().remove(savedKey(video)).apply(); _savedKeys.update { it - keyOf(video) } } // apagaram da galeria: volta a usar o Telegram
         return source
     }
 
