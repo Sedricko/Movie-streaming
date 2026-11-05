@@ -8,6 +8,8 @@ import androidx.lifecycle.viewModelScope
 import app.lumicast.data.library.SavedVideoSource
 import app.lumicast.data.library.VideoConverter
 import android.net.Uri
+import app.lumicast.data.library.decodeFolders
+import app.lumicast.data.library.encodeFolders
 import app.lumicast.data.library.findInDownloads
 import app.lumicast.data.library.saveToDownloads
 import app.lumicast.data.cast.renderConnectedSplash
@@ -45,6 +47,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -178,8 +181,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _loading = MutableStateFlow(false)
     val loading: StateFlow<Boolean> = _loading.asStateFlow()
 
-    private val _queue = MutableStateFlow<List<TgVideo>>(emptyList())
+    // A fila sobrevive a fechar o app: guardada como uma "pasta" no mesmo formato das pastas do usuário.
+    private val _queue = MutableStateFlow(decodeFolders(accountPrefs.getString("queue", null)).firstOrNull()?.videos ?: emptyList())
     val queue: StateFlow<List<TgVideo>> = _queue.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            _queue.drop(1).collect { accountPrefs.edit().putString("queue", encodeFolders(listOf(VideoFolder("queue", "queue", it)))).apply() }
+        }
+    }
 
     /** Horário marcado para a fila começar (epoch ms), ou null. */
     private val _scheduledAt = MutableStateFlow<Long?>(null)
