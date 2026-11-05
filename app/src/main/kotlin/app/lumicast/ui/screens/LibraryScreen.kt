@@ -91,6 +91,7 @@ fun LibraryScreen(
     onShareDiagnostics: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenAccounts: () -> Unit,
+    onOpenPermissions: () -> Unit,
     pinned: Set<Long>,
     onTogglePin: (TgChat) -> Unit,
     loadThumbnail: suspend (TgVideo) -> String?,
@@ -185,6 +186,7 @@ fun LibraryScreen(
                     OverflowMenu(menuOpen, { menuOpen = it }, "Mais opções") {
                         DropdownMenuItem(text = { Text("Configurações") }, onClick = { menuOpen = false; onOpenSettings() })
                         DropdownMenuItem(text = { Text("Contas") }, onClick = { menuOpen = false; onOpenAccounts() })
+                        DropdownMenuItem(text = { Text("Permissões") }, onClick = { menuOpen = false; onOpenPermissions() })
                         DropdownMenuItem(text = { Text("Monitoramento") }, onClick = { menuOpen = false; onShareDiagnostics() })
                         DropdownMenuItem(text = { Text("Sair da conta") }, onClick = { menuOpen = false; onLogout() })
                     }

@@ -33,6 +33,9 @@ import app.lumicast.ui.components.TransferBar
 import app.lumicast.ui.components.PreviewPlayer
 import app.lumicast.ui.components.SettingsSheet
 import app.lumicast.ui.components.AccountsSheet
+import androidx.compose.ui.platform.LocalContext
+import app.lumicast.ui.components.PermissionsDialog
+import app.lumicast.ui.components.missingPermissions
 import app.lumicast.ui.components.MonitorSheet
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -101,6 +104,17 @@ fun MainScreen(vm: MainViewModel) {
     var showSettings by remember { mutableStateOf(false) }
     var showAccounts by remember { mutableStateOf(false) }
     var showMonitor by remember { mutableStateOf(false) }
+    var showPermissions by remember { mutableStateOf(false) }
+    val appCtx = LocalContext.current
+    LaunchedEffect(Unit) {
+        // Na primeira vez após entrar, explica e pede o que falta; depois só pelo menu ⋮ → Permissões.
+        val prefs = appCtx.getSharedPreferences("lumicast", 0)
+        if (!prefs.getBoolean("permissionsPrompted", false) && missingPermissions(appCtx)) {
+            prefs.edit().putBoolean("permissionsPrompted", true).apply()
+            showPermissions = true
+        }
+    }
+    if (showPermissions) PermissionsDialog(onDismiss = { showPermissions = false })
     if (showMonitor) MonitorSheet(onShare = vm::shareDiagnostics, onDismiss = { showMonitor = false })
     val accounts by vm.accounts.collectAsStateWithLifecycle()
     if (showAccounts) {
@@ -175,6 +189,7 @@ fun MainScreen(vm: MainViewModel) {
                     onShareDiagnostics = { showMonitor = true },
                     onOpenSettings = { showSettings = true },
                     onOpenAccounts = { showAccounts = true },
+                    onOpenPermissions = { showPermissions = true },
                     pinned = pinned,
                     onTogglePin = vm::togglePin,
                     loadThumbnail = vm::thumbnail,
