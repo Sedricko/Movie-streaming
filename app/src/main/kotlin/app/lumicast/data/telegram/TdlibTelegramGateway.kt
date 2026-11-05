@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import org.drinkless.tdlib.Client
 import org.drinkless.tdlib.TdApi
@@ -193,8 +194,23 @@ class TdlibTelegramGateway(context: Context, private val dbDirName: String) : Te
     }
 
     override suspend fun openStream(video: TgVideo): StreamSource {
+        prefetchTail(video)
         send(TdApi.DownloadFile(video.fileId, STREAM_PRIORITY, 0, 0, false))
         return TdlibStreamSource(video.fileId, video.sizeBytes, video.mimeType)
+    }
+
+    /**
+     * MP4 com o índice no fim: a TV pede o final antes do começo e o TDLib só baixa um trecho por vez, então o
+     * download ia e voltava entre os dois (1 a 3 s de espera por vez no diagnóstico). Baixar o final primeiro,
+     * um trecho curto, deixa os dois pedidos já atendidos; o TDLib guarda as partes baixadas.
+     */
+    private suspend fun prefetchTail(video: TgVideo) {
+        if (video.sizeBytes <= TAIL_BYTES * 8) return // pequeno: baixa tudo rápido de qualquer jeito
+        val t0 = System.nanoTime()
+        runCatching {
+            withTimeout(TAIL_TIMEOUT_MS) { send(TdApi.DownloadFile(video.fileId, STREAM_PRIORITY, video.sizeBytes - TAIL_BYTES, TAIL_BYTES, true)) }
+        }.onFailure { Diag.log("stream", "file=${video.fileId}: final do arquivo não veio (${it.message}); segue pelo começo") }
+        Diag.metric("stream.final_ms", (System.nanoTime() - t0) / 1_000_000)
     }
 
     override suspend fun download(video: TgVideo): String {
@@ -310,6 +326,8 @@ class TdlibTelegramGateway(context: Context, private val dbDirName: String) : Te
     private companion object {
         const val CHAT_LIMIT = 2_000
         const val STREAM_PRIORITY = 32
+        const val TAIL_BYTES = 4L * 1024 * 1024
+        const val TAIL_TIMEOUT_MS = 8_000L
         const val READ_TIMEOUT_MS = 30_000L
         const val MOVE_COOLDOWN_MS = 1_000L
     }

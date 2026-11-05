@@ -140,8 +140,8 @@ fun NowPlayingSection(
             }
             FilledIconButton(onClick = onTogglePause, modifier = Modifier.size(72.dp), shape = CircleShape) {
                 Icon(
-                    if (state.status == PlayStatus.Playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                    contentDescription = if (state.status == PlayStatus.Playing) "Pausar" else "Reproduzir",
+                    if (state.status == PlayStatus.Playing || state.status == PlayStatus.Buffering) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                    contentDescription = if (state.status == PlayStatus.Playing || state.status == PlayStatus.Buffering) "Pausar" else "Reproduzir",
                     modifier = Modifier.size(36.dp),
                 )
             }

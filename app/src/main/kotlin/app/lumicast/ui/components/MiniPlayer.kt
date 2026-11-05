@@ -57,7 +57,7 @@ fun MiniPlayer(state: PlaybackState, loadThumbnail: suspend (TgVideo) -> String?
             )
         }
         IconButton(onClick = onTogglePause) {
-            val playing = state.status == PlayStatus.Playing
+            val playing = state.status == PlayStatus.Playing || state.status == PlayStatus.Buffering
             Icon(
                 if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                 contentDescription = if (playing) "Pausar" else "Reproduzir",
