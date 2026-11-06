@@ -112,9 +112,12 @@ fun NowPlayingSection(
 
         Column {
             // M5: trocar por barra própria mostrando o trecho já baixado em tom mais claro.
+            // Um seek ao soltar, não um por pixel do arrasto (a TV e o DLNA engasgam, e o tique de posição brigava com o dedo).
+            var dragSec by remember { mutableStateOf<Float?>(null) }
             Slider(
-                value = state.positionSec.toFloat(),
-                onValueChange = { onSeek(it.toInt()) },
+                value = dragSec ?: state.positionSec.toFloat(),
+                onValueChange = { dragSec = it },
+                onValueChangeFinished = { dragSec?.let { onSeek(it.toInt()) }; dragSec = null },
                 valueRange = 0f..video.durationSec.toFloat(),
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

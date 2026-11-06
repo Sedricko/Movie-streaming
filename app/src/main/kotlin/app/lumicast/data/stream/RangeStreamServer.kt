@@ -70,7 +70,7 @@ class RangeStreamServer(
     }
 
     fun unregister(url: String) {
-        sources.remove(url.substringAfterLast('/'))
+        sources.remove(url.substringAfterLast('/'))?.close() // libera o arquivo aberto (a miniatura vazava um descritor por vídeo)
     }
 
     private suspend fun serve(call: ApplicationCall, headOnly: Boolean) {

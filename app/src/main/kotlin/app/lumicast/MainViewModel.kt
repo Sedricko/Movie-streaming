@@ -103,15 +103,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private var splashUrl: String? = null
 
     /** Tela "Lumicast conectado" na TV (configurável). Também encerra o stream que estava aberto. */
+    private var splashJob: Job? = null
+
     private fun showSplash(device: CastDevice) {
         if (!_settings.value.showSplash || !container.realMode) return
-        viewModelScope.launch {
+        splashJob?.cancel()
+        splashJob = viewModelScope.launch {
             runCatching {
+                if (castJob?.isActive == true) return@launch // escolher a TV e mandar um vídeo juntos: o vídeo vence, a imagem não pode trocá-lo
                 endStream()
                 val srv = ensureServer()
                 splashUrl?.let(srv::unregister)
                 val png = withContext(Dispatchers.Default) { renderConnectedSplash(getApplication(), device.name) }
                 val url = srv.register(BytesSource(png, "image/png")).also { splashUrl = it }
+                if (castJob?.isActive == true) return@launch
                 cast.showImage(device, url, "Lumicast conectado")
                 queueDevice = device
             }.onFailure { Diag.log("splash", "não mostrou: ${it.message}") } // detalhe visual: não incomodar com aviso
@@ -454,7 +459,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 else "Baixados $done de ${videos.size}. ${lastError ?: "Confira a internet e o espaço livre e tente de novo."}"
                 Toast.makeText(getApplication(), msg, Toast.LENGTH_LONG).show()
             } catch (e: CancellationException) {
-                current?.let { withContext(NonCancellable) { telegram.closeStream(it) } } // parar o download no TDLib também
+                // parar o download no TDLib também, mas não se for o vídeo que está tocando ou em prévia (cortaria a transmissão)
+                current?.takeIf { it.fileId != streaming?.first?.fileId && it.fileId != previewing?.first?.fileId }?.let { withContext(NonCancellable) { telegram.closeStream(it) } }
                 Toast.makeText(getApplication(), "Download cancelado. $done de ${videos.size} já estão em Downloads/Lumicast/$name.", Toast.LENGTH_LONG).show()
                 throw e
             } finally {
@@ -472,7 +478,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun saveVideo(video: TgVideo, folder: String, onFraction: (Float) -> Unit = {}) {
         // Um de cada vez, na ordem em que chegam: botão de baixar e "baixar adiante" juntos não salvam o mesmo vídeo duas vezes ("(1)").
         saveLock.withLock {
-            savedSource(video)?.let { it.close(); return }
+            downloadedSource(video)?.let { it.close(); return } // só o arquivo em Downloads (o cache de convertidos não conta como baixado)
             // O app pode ter esquecido que salvou (reinstalou, limpou dados): confere o arquivo em Downloads antes de baixar.
             val existing = withContext(Dispatchers.IO) { runCatching { findInDownloads(getApplication(), folder, video.title, video.mimeType, video.sizeBytes) }.getOrNull() }
             if (existing != null) {
@@ -654,7 +660,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         Runtime.getRuntime().exit(0) // tudo (Telegram, pastas, progresso) recomeça com os dados da outra conta
     }
 
-    fun logout() = viewModelScope.launch { telegram.logout(); _chats.value = emptyList(); _openChat.value = null }
+    fun logout() = viewModelScope.launch {
+        telegram.logout(); _chats.value = emptyList(); _openChat.value = null
+        _queue.value = emptyList(); _played.value = emptySet() // os fileId da fila só valem para a sessão que saiu
+    }
 
     fun loadChats() = viewModelScope.launch {
         _loading.value = true
@@ -674,7 +683,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             runCatching {
                 do {
                     val page = telegram.videos(chat.id, next)
-                    _videos.value += page.videos
+                    _videos.value = (_videos.value + page.videos).distinctBy { "${it.chatId}:${it.messageId}" }
                     _loading.value = false
                     next = page.next
                 } while (next != 0L && page.videos.isNotEmpty() && _videos.value.size < MAX_VIDEOS)
@@ -693,7 +702,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun rescan() = cast.startDiscovery()
 
-    private var server: RangeStreamServer? = null
+    // O servidor mora no AppContainer: fechar a tela (Voltar) não pode cortar a transmissão que a TV ainda está puxando.
+    private var server: RangeStreamServer?
+        get() = container.streamServer
+        set(v) { container.streamServer = v }
     private var streaming: Pair<TgVideo, String>? = null
     private var streamSource: StreamSource? = null
     private var progressJob: Job? = null
@@ -706,6 +718,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val uri = accountPrefs.getString(savedKey(video), null) ?: return null
         val source = SavedVideoSource.open(getApplication(), uri, video.mimeType)
         if (source == null) { accountPrefs.edit().remove(savedKey(video)).apply(); _savedKeys.update { it - keyOf(video) } } // apagaram da galeria: volta a usar o Telegram
+        return source
+    }
+
+    /** Só o arquivo salvo em Downloads por este app (sem o convertido do cache). Sumiu: esquece o registro. */
+    private fun downloadedSource(video: TgVideo): StreamSource? {
+        val uri = accountPrefs.getString(savedKey(video), null) ?: return null
+        val source = SavedVideoSource.open(getApplication(), uri, video.mimeType)
+        if (source == null) { accountPrefs.edit().remove(savedKey(video)).apply(); _savedKeys.update { it - keyOf(video) } }
         return source
     }
 
@@ -791,8 +811,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun thumbnailUrl(video: TgVideo): String? {
         val path = runCatching { telegram.thumbnail(video) }.getOrNull() ?: return null
         val source = SavedVideoSource.open(getApplication(), Uri.fromFile(File(path)).toString(), "image/jpeg") ?: return null
-        return ensureServer().register(source)
+        val srv = ensureServer()
+        thumbRegistered?.let(srv::unregister) // a anterior era registrada a cada vídeo e nunca saía (descritor de arquivo vazando)
+        return srv.register(source).also { thumbRegistered = it }
     }
+
+    private var thumbRegistered: String? = null
 
     private suspend fun serve(video: TgVideo): Pair<String, StreamSource> {
         val srv = ensureServer()
@@ -857,6 +881,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private suspend fun castToNow(original: TgVideo, device: CastDevice) {
+        splashJob?.cancel() // a tela "conectado" não pode chegar depois do vídeo
         convertJob?.cancel() // escolheu outro vídeo: esquecer a conversão em andamento
         val start = _trimStart.value
         val saved = _progress.value[keyOf(original)]
@@ -892,6 +917,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }.onFailure {
             if (it is CancellationException && it !is TimeoutCancellationException) throw it // trocaram de vídeo: não mexer no stream do novo (o timeout é erro de verdade)
             endStream()
+            runCatching { cast.stop() } // o gateway já tinha gravado "Conectando": sem isto o mini player ficava em loop
+            _played.update { p -> p - keyOf(original) } // não chegou a tocar: não pular na fila
             toast(it)
         }
     }
@@ -943,14 +970,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /**
      * Com a fila tocando, baixa os vídeos dela na ordem de transmissão, do próximo até o último, para cada um
      * começar pronto. Espera o vídeo em transmissão terminar de baixar (ele tem prioridade) e relê a fila a cada
-     * passo: o que o usuário acrescenta ou tira entra na ordem. Salva em Downloads/Lumicast/Fila: é essa confirmação que deixa o vídeo sair da fila.
+     * passo: o que o usuário acrescenta ou tira entra na ordem. Salva em Downloads/Lumicast/Fila (o botão \"Baixado\" confere o arquivo).
      */
     private fun startPrefetch() {
         if (!container.realMode || !_settings.value.prefetch || prefetchJob?.isActive == true || streaming == null) return
         prefetchJob = viewModelScope.launch {
             val tried = HashSet<Int>()
             while (true) {
-                while ((streamSource?.downloadedFraction ?: 1f) < 1f) delay(2_000)
+                // Espera o stream atual (prioridade) baixar, mas no máximo 60 s: ao retomar do meio ou após seek ele nunca completa o começo.
+                var waited = 0
+                while ((streamSource?.downloadedFraction ?: 1f) < 1f && waited < 60_000) { delay(2_000); waited += 2_000 }
                 val video = _queue.value.firstOrNull { it.fileId !in tried && keyOf(it) !in _played.value } ?: break // adiante = o que ainda vai tocar
                 tried += video.fileId
                 val t0 = System.nanoTime()
@@ -1033,7 +1062,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
-        server?.stop()
+        if (streaming == null) { server?.stop(); server = null } // tocando: deixa o servidor vivo para a TV não perder o vídeo
         cast.stopDiscovery()
     }
 

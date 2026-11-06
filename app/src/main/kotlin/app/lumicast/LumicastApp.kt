@@ -41,6 +41,7 @@ class AppContainer(context: Context) {
     }
     val folders = FolderStore(context, accountName("lumicast"))
     val transfers = Transfers()
+    @Volatile var streamServer: app.lumicast.data.stream.RangeStreamServer? = null // ver MainViewModel.onCleared
 }
 
 /**

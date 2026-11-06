@@ -82,7 +82,10 @@ fun LoginScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(24.dp))
-        val step = when { editingPhone -> 1; state is AuthState.WaitCode -> 2; state == AuthState.WaitPassword -> 3; else -> 1 }
+        // Erro de código/senha: mostra a mensagem e continua na MESMA etapa (antes caía no formulário de telefone, sem saída).
+        val failed = state as? AuthState.Failed
+        val current = failed?.back ?: state
+        val step = when { editingPhone -> 1; current is AuthState.WaitCode -> 2; current == AuthState.WaitPassword -> 3; else -> 1 }
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             repeat(3) { i ->
                 Box(
@@ -93,7 +96,11 @@ fun LoginScreen(
         }
         Spacer(Modifier.height(24.dp))
 
-        when (val shown = if (editingPhone && state is AuthState.WaitCode) AuthState.WaitPhone else state) {
+        if (failed != null && failed.back != AuthState.WaitPhone) {
+            Text(failed.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+            Spacer(Modifier.height(12.dp))
+        }
+        when (val shown = if (editingPhone && current is AuthState.WaitCode) AuthState.WaitPhone else if (failed != null && failed.back == AuthState.WaitPhone) failed else current) {
             AuthState.Loading -> CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
 
             AuthState.WaitPhone, is AuthState.Failed -> {

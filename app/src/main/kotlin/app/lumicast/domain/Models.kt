@@ -39,7 +39,8 @@ sealed interface AuthState {
     data class WaitCode(val phone: String) : AuthState
     data object WaitPassword : AuthState
     data class Ready(val userName: String) : AuthState
-    data class Failed(val message: String) : AuthState
+    /** [back]: etapa onde o erro aconteceu (código ou senha errados não podem mandar o usuário de volta ao telefone). */
+    data class Failed(val message: String, val back: AuthState = WaitPhone) : AuthState
 }
 
 enum class PlayStatus { Idle, Connecting, Buffering, Playing, Paused,

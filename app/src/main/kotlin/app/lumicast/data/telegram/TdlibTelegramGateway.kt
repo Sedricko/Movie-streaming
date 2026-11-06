@@ -119,8 +119,9 @@ class TdlibTelegramGateway(context: Context, private val dbDirName: String) : Te
     }
 
     private suspend fun authStep(query: TdApi.Function<*>) {
+        val step = _auth.value.takeIf { it is AuthState.WaitCode || it == AuthState.WaitPassword } ?: AuthState.WaitPhone
         _auth.value = AuthState.Loading
-        runCatching { send(query) }.onFailure { _auth.value = AuthState.Failed(friendly(it)) }
+        runCatching { send(query) }.onFailure { _auth.value = AuthState.Failed(friendly(it), step) } // volta à etapa de onde veio
     }
 
     override suspend fun submitPhone(phone: String) {
