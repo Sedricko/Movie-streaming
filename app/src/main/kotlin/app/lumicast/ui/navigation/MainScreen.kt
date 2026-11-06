@@ -39,13 +39,18 @@ import app.lumicast.ui.components.missingPermissions
 import app.lumicast.ui.components.MonitorSheet
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.automirrored.rounded.QueueMusic
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
+import app.lumicast.ui.screens.QueueScreen
 import app.lumicast.ui.screens.LibraryScreen
 import app.lumicast.ui.screens.LoginScreen
 import app.lumicast.ui.screens.TvScreen
 
-/** Duas abas: escolher vídeos (Biblioteca) e tudo o que acontece na TV (TV). */
+/** Três abas por contexto de uso: achar (Biblioteca), planejar e baixar (Fila) e controlar a TV (TV). */
 private enum class Tab(val route: String, val label: String, val icon: ImageVector) {
     Library("biblioteca", "Biblioteca", Icons.Rounded.VideoLibrary),
+    Queue("fila", "Fila", Icons.AutoMirrored.Rounded.QueueMusic),
     Tv("tv", "TV", Icons.Rounded.Tv),
 }
 
@@ -83,6 +88,7 @@ fun MainScreen(vm: MainViewModel) {
     val queue by vm.queue.collectAsStateWithLifecycle()
     val played by vm.queuePlayed.collectAsStateWithLifecycle()
     val saved by vm.savedKeys.collectAsStateWithLifecycle()
+    val savingKey by vm.savingKey.collectAsStateWithLifecycle()
     val watched by vm.watchedKeys.collectAsStateWithLifecycle()
     val folders by vm.folders.collectAsStateWithLifecycle()
     val openFolder by vm.openFolder.collectAsStateWithLifecycle()
@@ -129,6 +135,9 @@ fun MainScreen(vm: MainViewModel) {
             storage = storage,
             onClearTelegram = vm::clearTelegramCache,
             onClearConverted = vm::clearConverted,
+            onOpenAccounts = { showSettings = false; showAccounts = true },
+            onOpenPermissions = { showSettings = false; showPermissions = true },
+            onOpenMonitor = { showSettings = false; showMonitor = true },
             onDismiss = { showSettings = false },
         )
     }
@@ -155,7 +164,11 @@ fun MainScreen(vm: MainViewModel) {
                         NavigationBarItem(
                             selected = route == tab.route,
                             onClick = { go(tab) },
-                            icon = { Icon(tab.icon, contentDescription = null) },
+                            icon = {
+                                if (tab == Tab.Queue && queue.isNotEmpty()) {
+                                    BadgedBox(badge = { Badge { Text("${queue.size}") } }) { Icon(tab.icon, contentDescription = null) }
+                                } else Icon(tab.icon, contentDescription = null)
+                            },
                             label = { Text(tab.label) },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -216,6 +229,40 @@ fun MainScreen(vm: MainViewModel) {
                     onBeam = { go(Tab.Tv) },
                 )
             }
+            composable(Tab.Queue.route) {
+                val connecting = playback.status in listOf(PlayStatus.Connecting, PlayStatus.Buffering, PlayStatus.Reconnecting)
+                QueueScreen(
+                    queue = queue,
+                    queueNote = { v ->
+                        val k = "${v.chatId}:${v.messageId}"
+                        listOfNotNull(
+                            if (k == savingKey) "Baixando…" else null, // estado que está acontecendo agora vem primeiro
+                            if (k in played) "Já tocou" else null,
+                            if (k in watched) "Visto" else null,
+                            if (k in saved) "Baixado" else null,
+                        ).joinToString(" • ").ifEmpty { null }
+                    },
+                    tv = selectedTv,
+                    playing = playback.video != null,
+                    busy = connecting,
+                    downloading = downloadStatus != null,
+                    scheduledAt = scheduledAt,
+                    switchEveryMin = switchEveryMin,
+                    trimStart = trimStart,
+                    trimEnd = trimEnd,
+                    onTrim = vm::setTrim,
+                    onMove = vm::moveInQueue,
+                    onRemove = vm::removeFromQueue,
+                    onSwitchEvery = vm::setSwitchEvery,
+                    onStart = vm::startQueue,
+                    onCancelSchedule = vm::cancelSchedule,
+                    onDownloadQueue = vm::downloadQueue,
+                    onClearQueue = vm::clearQueue,
+                    onClearPlayed = vm::clearPlayed,
+                    onPlayItem = vm::playFromQueue,
+                    onSort = vm::sortQueue,
+                )
+            }
             composable(Tab.Tv.route) {
                 TvScreen(
                     loadThumbnail = vm::thumbnail,
@@ -230,32 +277,8 @@ fun MainScreen(vm: MainViewModel) {
                     onPrevious = vm::previous,
                     onNext = vm::next,
                     canSkipNext = queue.any { "${it.chatId}:${it.messageId}" !in played } || settings.autoNext,
-                    queueNote = { v ->
-                        val k = "${v.chatId}:${v.messageId}"
-                        listOfNotNull(
-                            if (k in played) "Já tocou" else null, // primeiro: a fila destaca pelo início do texto
-                            if (k in watched) "Visto" else null,
-                            if (k in saved) "Baixado" else null,
-                        ).joinToString(" • ").ifEmpty { null }
-                    },
                     onVolume = vm::setVolume,
                     onSpeed = vm::setSpeed,
-                    queue = queue,
-                    scheduledAt = scheduledAt,
-                    switchEveryMin = switchEveryMin,
-                    trimStart = trimStart,
-                    trimEnd = trimEnd,
-                    onTrim = vm::setTrim,
-                    onMove = vm::moveInQueue,
-                    onRemove = vm::removeFromQueue,
-                    onSwitchEvery = vm::setSwitchEvery,
-                    onStartQueue = vm::startQueue,
-                    onCancelSchedule = vm::cancelSchedule,
-                    onDownloadQueue = vm::downloadQueue,
-                    onClearQueue = vm::clearQueue,
-                    onClearPlayed = vm::clearPlayed,
-                    onPlayQueueItem = vm::playFromQueue,
-                    onSortQueue = vm::sortQueue,
                 )
             }
         }

@@ -33,7 +33,7 @@ import app.lumicast.domain.PlaybackState
 import app.lumicast.domain.TgVideo
 import app.lumicast.ui.components.TvPicker
 
-/** Tudo sobre a TV num lugar só: qual TV, o que está tocando e o que vem a seguir. */
+/** Aba TV: qual TV e o controle do que está tocando. A fila fica na aba Fila. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TvScreen(
@@ -52,23 +52,6 @@ fun TvScreen(
     canSkipNext: Boolean,
     onVolume: (Float) -> Unit,
     onSpeed: (Float) -> Unit,
-    queue: List<TgVideo>,
-    queueNote: (TgVideo) -> String?,
-    scheduledAt: Long?,
-    switchEveryMin: Int,
-    trimStart: Int,
-    trimEnd: Int,
-    onTrim: (Int, Int) -> Unit,
-    onMove: (Int, Int) -> Unit,
-    onRemove: (Int) -> Unit,
-    onSwitchEvery: (Int) -> Unit,
-    onStartQueue: (CastDevice, Long?) -> Unit,
-    onCancelSchedule: () -> Unit,
-    onDownloadQueue: () -> Unit,
-    onClearQueue: () -> Unit,
-    onClearPlayed: () -> Unit,
-    onPlayQueueItem: (Int) -> Unit,
-    onSortQueue: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var picking by remember { mutableStateOf(false) }
@@ -101,30 +84,6 @@ fun TvScreen(
             hasNext = canSkipNext,
             onVolume = onVolume,
             onSpeed = onSpeed,
-        )
-
-        HorizontalDivider()
-
-        QueueSection(
-            queue = queue,
-            queueNote = queueNote,
-            tv = tv,
-            playing = playback.video != null,
-            scheduledAt = scheduledAt,
-            switchEveryMin = switchEveryMin,
-            trimStart = trimStart,
-            trimEnd = trimEnd,
-            onTrim = onTrim,
-            onMove = onMove,
-            onRemove = onRemove,
-            onSwitchEvery = onSwitchEvery,
-            onStart = onStartQueue,
-            onCancelSchedule = onCancelSchedule,
-            onDownloadQueue = onDownloadQueue,
-            onClearQueue = onClearQueue,
-            onClearPlayed = onClearPlayed,
-            onPlayItem = onPlayQueueItem,
-            onSort = onSortQueue,
         )
     }
 

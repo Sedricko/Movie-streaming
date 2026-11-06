@@ -44,7 +44,7 @@ fun PreviewPlayer(url: String, onDismiss: () -> Unit) {
             addListener(object : Player.Listener {
                 override fun onPlayerError(e: PlaybackException) {
                     Diag.log("preview", "erro: ${e.errorCodeName} ${e.cause?.message}")
-                    error = "Não deu para tocar no celular (${e.errorCodeName})."
+                    error = "Não deu para tocar no celular. O formato pode não ser aceito aqui: tente transmitir para a TV. (${e.errorCodeName})"
                 }
             })
             setMediaItem(MediaItem.fromUri(url))

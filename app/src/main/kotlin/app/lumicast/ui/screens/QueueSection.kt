@@ -4,6 +4,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -90,6 +94,10 @@ fun QueueSection(
     onClearQueue: () -> Unit,
     onClearPlayed: () -> Unit,
     onPlayItem: (Int) -> Unit,
+    /** Conectando à TV: o botão Iniciar mostra spinner e fica desligado. */
+    busy: Boolean = false,
+    /** Há download em andamento: o botão Baixar fica desligado e mostra "Baixando…". */
+    downloading: Boolean = false,
     onSort: (descending: Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -105,10 +113,10 @@ fun QueueSection(
 
     Column(modifier, verticalArrangement = Arrangement.spacedBy(ROW_GAP)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("A seguir (${queue.size})", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+            Text("Fila (${queue.size})", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
             if (queue.isNotEmpty()) {
                 if (queue.size > 1) TextButton(onClick = { onSort(ascending) }) { Text(if (ascending) "Ordenar 9→1" else "Ordenar 1→9") }
-                TextButton(onClick = onDownloadQueue) { Text("Baixar") }
+                TextButton(onClick = onDownloadQueue, enabled = !downloading) { Text(if (downloading) "Baixando…" else "Baixar") }
                 Box {
                     var clearMenu by remember { mutableStateOf(false) }
                     TextButton(onClick = { clearMenu = true }) { Text("Limpar") }
@@ -169,11 +177,14 @@ fun QueueSection(
                 Column(Modifier.weight(1f).padding(start = 8.dp)) {
                     Text("${i + 1}. ${video.title}", style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     val note = queueNote(video)
-                    Text(
-                        formatDuration(video.durationSec) + (note?.let { " • $it" } ?: ""),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (note?.startsWith("Já tocou") == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (note?.startsWith("Baixando") == true) CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 2.dp)
+                        Text(
+                            formatDuration(video.durationSec) + (note?.let { " • $it" } ?: ""),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (note?.startsWith("Já tocou") == true || note?.startsWith("Baixando") == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
                 IconButton(onClick = { onPlayItem(i) }, enabled = tv != null) { Icon(Icons.Rounded.PlayArrow, "Tocar ${video.title} agora") }
                 IconButton(onClick = { onRemove(i) }) { Icon(Icons.Rounded.Close, "Tirar ${video.title} da fila") }
@@ -186,10 +197,18 @@ fun QueueSection(
                 TextButton(onClick = onCancelSchedule) { Text("Cancelar") }
             }
             queue.isEmpty() -> Unit
-            tv == null -> Text("Escolha uma TV acima para começar.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            tv == null -> Text("Escolha uma TV na aba TV para começar.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             else -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 // Tocando agora: a fila já anda sozinha; o botão só aparece para começar do zero.
-                if (!playing) Button(onClick = { onStart(tv, null) }, modifier = Modifier.weight(1f)) { Text("Iniciar na ${tv.name}", maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                if (!playing) Button(onClick = { onStart(tv, null) }, enabled = !busy, modifier = Modifier.weight(1f)) {
+                    if (busy) {
+                        CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Conectando…")
+                    } else {
+                        Text("Iniciar na ${tv.name}", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
                 OutlinedButton(onClick = { picking = true }) { Text("Agendar") }
             }
         }

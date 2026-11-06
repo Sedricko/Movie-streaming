@@ -27,6 +27,7 @@ import app.lumicast.domain.AuthState
 import app.lumicast.domain.CastDevice
 import app.lumicast.domain.NaturalTitleOrder
 import app.lumicast.domain.PlayStatus
+import app.lumicast.domain.QueueLogic
 import app.lumicast.domain.TgChat
 import app.lumicast.domain.TgVideo
 import app.lumicast.domain.Transfer
@@ -220,11 +221,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Tira da fila só os que já tocaram. */
     fun clearPlayed() {
-        _queue.update { q -> q.filter { keyOf(it) !in _played.value } }
+        _queue.update { q -> QueueLogic.clearPlayed(q, _played.value) }
         _played.value = emptySet()
     }
 
-    private fun hasPlayable() = _queue.value.any { keyOf(it) !in _played.value }
+    private fun hasPlayable() = QueueLogic.hasPlayable(_queue.value, _played.value)
 
     /**
      * Confere se os arquivos do histórico de downloads ainda existem e esquece os que sumiram (apagados pelo gerenciador de
@@ -475,9 +476,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      */
     private val saveLock = Mutex()
 
+    /** Chave do vídeo que está sendo baixado agora (a fila mostra um spinner nele). */
+    private val _savingKey = MutableStateFlow<String?>(null)
+    val savingKey: StateFlow<String?> = _savingKey.asStateFlow()
+
     private suspend fun saveVideo(video: TgVideo, folder: String, onFraction: (Float) -> Unit = {}) {
         // Um de cada vez, na ordem em que chegam: botão de baixar e "baixar adiante" juntos não salvam o mesmo vídeo duas vezes ("(1)").
         saveLock.withLock {
+            _savingKey.value = keyOf(video)
+            try { doSaveVideo(video, folder, onFraction) } finally { _savingKey.value = null }
+        }
+    }
+
+    private suspend fun doSaveVideo(video: TgVideo, folder: String, onFraction: (Float) -> Unit) {
+        run {
             downloadedSource(video)?.let { it.close(); return } // só o arquivo em Downloads (o cache de convertidos não conta como baixado)
             // O app pode ter esquecido que salvou (reinstalou, limpou dados): confere o arquivo em Downloads antes de baixar.
             val existing = withContext(Dispatchers.IO) { runCatching { findInDownloads(getApplication(), folder, video.title, video.mimeType, video.sizeBytes) }.getOrNull() }
@@ -497,7 +509,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun enqueueAll(videos: List<TgVideo>) {
         // Mesmo vídeo duas vezes confundia o "já tocou" (a marca é por vídeo): só entra o que ainda não está na fila.
-        val fresh = videos.distinctBy { keyOf(it) }.filter { v -> _queue.value.none { keyOf(it) == keyOf(v) } }
+        val fresh = QueueLogic.fresh(_queue.value, videos)
         if (fresh.isEmpty()) {
             Toast.makeText(getApplication(), "Já está na fila.", Toast.LENGTH_SHORT).show()
             return
@@ -534,9 +546,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun removeFromQueue(index: Int) {
-        val gone = _queue.value.getOrNull(index)?.let { keyOf(it) } ?: return
-        _queue.value = _queue.value.filterIndexed { i, _ -> i != index }
-        _played.update { it - gone } // senão, ao recolocar, o vídeo voltava como "já tocou" e nunca tocava
+        val (items, played) = QueueLogic.remove(_queue.value, _played.value, index) ?: return
+        _queue.value = items
+        _played.value = played
     }
 
     fun setTrim(startSec: Int, endSec: Int) {
@@ -559,8 +571,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         current?.let { c ->
-            val k = keyOf(c)
-            if (_queue.value.any { keyOf(it) == k }) _played.update { it - k } else _queue.value = listOf(c) + _queue.value
+            val (items, played) = QueueLogic.rewind(_queue.value, _played.value, c)
+            _queue.value = items
+            _played.value = played
         }
         castTo(prev, device)
     }
@@ -570,7 +583,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val q = _queue.value
         val video = q.getOrNull(index) ?: return
         val device = queueDevice ?: cast.playback.value.device ?: selectedTv.value ?: return
-        _played.value = q.take(index + 1).map { keyOf(it) }.toSet()
+        _played.value = QueueLogic.playedUpTo(q, index)
         pushHistory(cast.playback.value.video)
         castTo(video, device)
     }
@@ -627,7 +640,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun playNext(device: CastDevice) {
-        val next = _queue.value.firstOrNull { keyOf(it) !in _played.value } ?: return
+        val next = QueueLogic.next(_queue.value, _played.value) ?: return
         _played.update { it + keyOf(next) } // fica na fila, marcado como "já tocou"; quem tira é o usuário (Limpar)
         pushHistory(cast.playback.value.video)
         castTo(next, device)
