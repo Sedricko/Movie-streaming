@@ -233,8 +233,8 @@ fun MainScreen(vm: MainViewModel) {
                     queueNote = { v ->
                         val k = "${v.chatId}:${v.messageId}"
                         listOfNotNull(
+                            if (k in played) "Já tocou" else null, // primeiro: a fila destaca pelo início do texto
                             if (k in watched) "Visto" else null,
-                            if (k in played) "Já tocou" else null,
                             if (k in saved) "Baixado" else null,
                         ).joinToString(" • ").ifEmpty { null }
                     },

@@ -31,7 +31,7 @@ import java.util.concurrent.ConcurrentHashMap
  * Segurança: informe em [host] o IPv4 do Wi-Fi (veja [findLanIPv4]), não "0.0.0.0".
  */
 class RangeStreamServer(
-    private val host: String,
+    val host: String,
     private val requestedPort: Int = 0,
 ) {
     private val sources = ConcurrentHashMap<String, StreamSource>()

@@ -51,17 +51,24 @@ fun findInDownloads(context: Context, folder: String, title: String, mimeType: S
 }
 
 /** O arquivo salvo ainda existe? (o histórico guarda a Uri; o usuário pode ter apagado o arquivo pelo gerenciador). */
-fun savedExists(context: Context, uri: String): Boolean = runCatching {
+fun savedExists(context: Context, uri: String): Boolean = try {
     val u = Uri.parse(uri)
     if (u.scheme == "file") File(u.path.orEmpty()).let { it.isFile && it.length() > 0 }
     // Abre de verdade: o registro na mídia do Android pode continuar depois de o gerenciador de arquivos apagar o arquivo.
     else context.contentResolver.openFileDescriptor(u, "r")?.use { it.statSize > 0 } ?: false
-}.getOrDefault(false)
+} catch (e: java.io.FileNotFoundException) {
+    false // sumiu de verdade
+} catch (e: Exception) {
+    true // não deu para saber (armazenamento indisponível, permissão): não apagar o "Baixado" por uma falha passageira
+}
 
 /** Apaga o arquivo salvo em Downloads (Uri de MediaStore ou arquivo). Sem erro = apagou ou já não existia; o Android pode recusar (SecurityException). */
 fun deleteSaved(context: Context, uri: String) {
     val u = Uri.parse(uri)
-    if (u.scheme == "file") u.path?.let { File(it).delete() } else context.contentResolver.delete(u, null, null)
+    if (u.scheme == "file") u.path?.let { File(it).delete() }
+    else if (context.contentResolver.delete(u, null, null) == 0 && savedExists(context, uri)) {
+        throw java.io.IOException("O Android não apagou o arquivo.") // 0 linhas e o arquivo ainda abre: não é sucesso
+    }
 }
 
 /** Copia o vídeo baixado para Downloads/Lumicast/<pasta> (aparece na galeria). Devolve a Uri do arquivo salvo. */
@@ -111,6 +118,6 @@ class SavedVideoSource private constructor(private val pfd: ParcelFileDescriptor
         /** null se o arquivo sumiu (o usuário apagou da galeria, por exemplo). */
         fun open(context: Context, uri: String, mimeType: String): SavedVideoSource? = runCatching {
             SavedVideoSource(context.contentResolver.openFileDescriptor(Uri.parse(uri), "r")!!, mimeType)
-        }.getOrNull()?.takeIf { it.sizeBytes > 0 }
+        }.getOrNull()?.let { if (it.sizeBytes > 0) it else { it.close(); null } } // fecha o descritor se o arquivo está vazio
     }
 }

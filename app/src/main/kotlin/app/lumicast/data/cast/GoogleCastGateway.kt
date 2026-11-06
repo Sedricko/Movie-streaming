@@ -44,6 +44,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -260,7 +261,7 @@ class GoogleCastGateway(context: Context) : CastGateway {
         val current = castContext.sessionManager.currentCastSession
         if (current?.isConnected == true && router.selectedRoute.id == device.id) return current
         val route = router.routes.firstOrNull { it.id == device.id } ?: error("A TV saiu da rede. Procure de novo.")
-        return withTimeout(20_000) {
+        return withTimeoutOrNull(20_000) {
             suspendCancellableCoroutine { cont ->
                 val sessions = castContext.sessionManager
                 val listener = object : SessionManagerListener<CastSession> {
@@ -285,7 +286,7 @@ class GoogleCastGateway(context: Context) : CastGateway {
                 cont.invokeOnCancellation { sessions.removeSessionManagerListener(listener, CastSession::class.java) }
                 router.selectRoute(route)
             }
-        }
+        } ?: error("A TV não respondeu em 20 s. Confira se está ligada e na mesma rede.") // TimeoutCancellationException era confundida com cancelamento e sumia em silêncio
     }
 
     override suspend fun togglePause() = withContext(Dispatchers.Main) {

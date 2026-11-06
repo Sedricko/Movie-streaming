@@ -36,6 +36,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import app.lumicast.domain.VideoFolder
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
@@ -509,6 +510,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun clearQueue() {
         _queue.value = emptyList()
+        _played.value = emptySet()
     }
 
     fun downloadQueue() = downloadAll("Fila", _queue.value)
@@ -526,7 +528,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun removeFromQueue(index: Int) {
+        val gone = _queue.value.getOrNull(index)?.let { keyOf(it) } ?: return
         _queue.value = _queue.value.filterIndexed { i, _ -> i != index }
+        _played.update { it - gone } // senão, ao recolocar, o vídeo voltava como "já tocou" e nunca tocava
     }
 
     fun setTrim(startSec: Int, endSec: Int) {
@@ -654,7 +658,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun loadChats() = viewModelScope.launch {
         _loading.value = true
-        _chats.value = telegram.chats()
+        runCatching { _chats.value = telegram.chats() }.onFailure { if (it !is CancellationException) toast(it) }
         _loading.value = false
     }
 
@@ -681,6 +685,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun closeChat() {
         openJob?.cancel()
+        _loading.value = false // cancelar a carga relança a cancelação e pulava o "false" lá em cima
         _openFolderId.value = null
         _openChat.value = null
         _videos.value = emptyList()
@@ -775,9 +780,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun thumbnail(video: TgVideo): String? = runCatching { telegram.thumbnail(video) }.getOrNull()
 
     /** Abre o stream do Telegram no servidor local e devolve a URL (a TV e o player do celular usam a mesma). */
-    private suspend fun ensureServer(): RangeStreamServer = server ?: run {
+    private suspend fun ensureServer(): RangeStreamServer {
         val ip = findLanIPv4(getApplication()) ?: error("Sem Wi-Fi. Conecte o celular à mesma rede da TV.")
-        RangeStreamServer(ip).also { it.start(); server = it }
+        server?.takeIf { it.host == ip }?.let { return it }
+        server?.stop() // o IP mudou (Wi-Fi renovou ou trocou de rede): a URL antiga já não chega na TV
+        return RangeStreamServer(ip).also { it.start(); server = it }
     }
 
     /** Miniatura do vídeo servida para a TV mostrar enquanto carrega (null se não houver). */
@@ -803,7 +810,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun toast(t: Throwable) {
-        if (t is CancellationException) return // fechar o app ou trocar de vídeo cancela tarefas: não é erro
+        if (t is CancellationException && t !is TimeoutCancellationException) return // fechar o app ou trocar de vídeo cancela tarefas: não é erro
         Diag.log("erro", t.stackTraceToString().take(800))
         Toast.makeText(getApplication(), t.message ?: "Não foi possível abrir o vídeo. Tente de novo.", Toast.LENGTH_LONG).show()
     }
@@ -883,7 +890,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             Diag.log("vm", "transmitindo file=${video.fileId} (${video.mimeType}, ${video.sizeBytes} B) em ${device.protocol}")
             startPrefetch()
         }.onFailure {
-            if (it is CancellationException) throw it // trocaram de vídeo: não mexer no stream do novo
+            if (it is CancellationException && it !is TimeoutCancellationException) throw it // trocaram de vídeo: não mexer no stream do novo (o timeout é erro de verdade)
             endStream()
             toast(it)
         }
@@ -944,7 +951,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val tried = HashSet<Int>()
             while (true) {
                 while ((streamSource?.downloadedFraction ?: 1f) < 1f) delay(2_000)
-                val video = _queue.value.firstOrNull { it.fileId !in tried } ?: break
+                val video = _queue.value.firstOrNull { it.fileId !in tried && keyOf(it) !in _played.value } ?: break // adiante = o que ainda vai tocar
                 tried += video.fileId
                 val t0 = System.nanoTime()
                 runCatching { saveVideo(video, "Fila") }
@@ -1010,15 +1017,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         runCatching { telegram.trimCache(gb * 1024L * 1024 * 1024) }.onFailure { Diag.log("storage", "limite falhou: ${it.message}") }
     }
 
-    fun togglePause() = viewModelScope.launch { cast.togglePause() }
-    fun seekTo(sec: Int) = viewModelScope.launch { cast.seekTo(sec) }
+    // TV desligada ou Wi-Fi oscilando faz o gateway lançar exceção: sem o try, ela subia sem tratamento e derrubava o app.
+    fun togglePause() = viewModelScope.launch { runCatching { cast.togglePause() }.onFailure(::toast) }
+    fun seekTo(sec: Int) = viewModelScope.launch { runCatching { cast.seekTo(sec) }.onFailure(::toast) }
     fun stop() = viewModelScope.launch {
+        castJob?.cancel() // parar durante o carregamento: o vídeo não pode começar depois do Parar
+        scheduleJob?.cancel()
+        _scheduledAt.value = null
         convertJob?.cancel()
         switchJob?.cancel()
         prefetchJob?.cancel()
         queueDevice = null // parar à mão não puxa o próximo da fila
-        cast.stop()
-        endStream()
+        runCatching { cast.stop() }.onFailure(::toast)
+        runCatching { endStream() }.onFailure { if (it !is CancellationException) Diag.log("erro", "endStream: ${it.message}") }
     }
 
     override fun onCleared() {

@@ -195,6 +195,8 @@ class TdlibTelegramGateway(context: Context, private val dbDirName: String) : Te
     }
 
     override suspend fun openStream(video: TgVideo): StreamSource {
+        // A fila e as pastas voltam do JSON, sem passar por videos(): sem isto, files[fileId] ficava vazio e a leitura esperava 30 s.
+        (send(TdApi.GetFile(video.fileId)) as? TdApi.File)?.let { files[it.id] = it }
         prefetchTail(video)
         send(TdApi.DownloadFile(video.fileId, STREAM_PRIORITY, 0, 0, false))
         return TdlibStreamSource(video.fileId, video.sizeBytes, video.mimeType)
