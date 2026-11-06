@@ -490,7 +490,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun enqueueAll(videos: List<TgVideo>) {
         // Mesmo vídeo duas vezes confundia o "já tocou" (a marca é por vídeo): só entra o que ainda não está na fila.
-        val fresh = videos.filter { v -> _queue.value.none { keyOf(it) == keyOf(v) } }
+        val fresh = videos.distinctBy { keyOf(it) }.filter { v -> _queue.value.none { keyOf(it) == keyOf(v) } }
         if (fresh.isEmpty()) {
             Toast.makeText(getApplication(), "Já está na fila.", Toast.LENGTH_SHORT).show()
             return

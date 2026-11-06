@@ -18,7 +18,8 @@ import java.io.File
 /** Nome seguro para arquivo/pasta, com extensão de vídeo. */
 internal fun safeFileName(title: String, mimeType: String = ""): String {
     val clean = title.replace(Regex("""[\\/:*?"<>|\n\r]"""), "_").trim().trimStart('.').ifBlank { "video" }.take(120)
-    if (clean.contains('.') && !clean.endsWith('.')) return clean
+    // só conta como extensão o que parece uma (letra + até 4 letras/números): "Aula 1.5" não tem
+    if (Regex("""\.[A-Za-z][A-Za-z0-9]{1,4}$""").containsMatchIn(clean)) return clean
     val ext = when (mimeType) { "video/x-matroska" -> "mkv"; "video/webm" -> "webm"; "video/quicktime" -> "mov"; else -> "mp4" }
     return "${clean.trimEnd('.')}.$ext"
 }

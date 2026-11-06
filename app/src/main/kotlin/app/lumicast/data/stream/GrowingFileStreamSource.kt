@@ -26,7 +26,7 @@ class GrowingFileStreamSource(
 ) : StreamSource {
 
     override suspend fun read(offset: Long, buffer: ByteArray, length: Int): Int {
-        if (offset >= sizeBytes || length <= 0) return -1
+        if (offset < 0 || offset >= sizeBytes || length <= 0) return -1
         if (availablePrefix() <= offset) onRandomAccess(offset)
 
         val ready = withTimeoutOrNull(timeoutMs) {

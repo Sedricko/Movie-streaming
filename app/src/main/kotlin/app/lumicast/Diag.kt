@@ -58,7 +58,7 @@ object Diag {
 
     /** Acumula uma medida (ms, KB, contagem…). O relatório mostra n · média · máx: aponta gargalos sem logar tudo. */
     fun metric(name: String, value: Long) = synchronized(lines) {
-        val s = stats.getOrPut(name) { LongArray(3) }
+        val s = stats.getOrPut(name) { longArrayOf(0, 0, Long.MIN_VALUE) }
         s[0]++; s[1] += value; if (value > s[2]) s[2] = value
     }
 

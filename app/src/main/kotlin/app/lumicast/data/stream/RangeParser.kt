@@ -28,7 +28,7 @@ object RangeParser {
 
         return when {
             first.isEmpty() -> { // sufixo: "-N" = últimos N bytes
-                val n = last.toLongOrNull() ?: return RangeResult.Full
+                val n = last.toLongOrNull()?.takeIf { it >= 0L } ?: return RangeResult.Full // "--5": inválido, ignorar
                 if (n <= 0L || size <= 0L) RangeResult.Unsatisfiable
                 else RangeResult.Partial(maxOf(0L, size - n), size - 1)
             }

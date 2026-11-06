@@ -12,7 +12,7 @@ fun formatDuration(totalSec: Int): String {
 
 fun formatSize(bytes: Long): String {
     val mib = bytes / (1024.0 * 1024.0)
-    return if (mib >= 1024) String.format(Locale("pt", "BR"), "%.1f GB", mib / 1024.0)
+    return if (Math.round(mib) >= 1024L) String.format(Locale("pt", "BR"), "%.1f GB", mib / 1024.0)
     else String.format(Locale("pt", "BR"), "%.0f MB", mib)
 }
 
